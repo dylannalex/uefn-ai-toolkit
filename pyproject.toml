@@ -1,0 +1,19 @@
+[project]
+name = "uefn-mcp"
+version = "0.1.0"
+description = "MCP server for driving Unreal Editor for Fortnite (UEFN) via Python remote execution"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp[cli]>=1.2.0",
+]
+
+[project.scripts]
+uefn-mcp = "uefn_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/uefn_mcp"]
