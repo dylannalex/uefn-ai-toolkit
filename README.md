@@ -1,92 +1,60 @@
 # uefn-mcp
 
-An MCP server that drives a running Unreal Editor for Fortnite (UEFN) instance
-via Python, so an MCP client (e.g. Claude Code, Claude Desktop) can inspect
-and build out Fortnite maps directly instead of clicking through the editor
-UI by hand.
+Lets Claude build Fortnite maps for you inside UEFN (Unreal Editor for
+Fortnite) — placing props, moving things around, browsing your content —
+instead of you clicking through the editor UI by hand.
 
-## How it works
+## What you need first
 
-UEFN ships the Python Editor Script Plugin, which includes a remote execution
-protocol: UDP multicast for discovering a running editor, then a TCP channel
-for sending it Python to execute. This server discovers the running editor,
-opens a command connection, and exposes editor operations (spawn/move/delete
-actors, browse content, save the level, run arbitrary Python) as MCP tools.
+- UEFN installed, with a project created.
+- [Claude Code](https://claude.ai/code).
 
-No plugin code runs inside UEFN beyond what ships with the engine already —
-this is purely a client of that existing protocol.
+That's it — Claude can install everything else itself.
 
-## Prerequisites
+## Setup
 
-- UEFN installed, with a project created and open.
-- Python enabled for that project (in the UEFN editor: project settings →
-  Experimental → Python).
-- [uv](https://docs.astral.sh/uv/) installed to run this server.
+Open a terminal in this folder, start Claude Code, and paste this:
 
-## One-time setup: enable remote execution
+> Install and register the uefn-mcp server with Claude Code: check whether
+> `uv` is installed and install it if it's missing, run `uv sync` in this
+> folder, then run
+> `claude mcp add uefn -- uv --directory "$(pwd)" run uefn-mcp`.
 
-**Unlike stock Unreal Editor, UEFN ships with Python remote execution off by
-default.** Turn it on by adding a `Config/DefaultEngine.ini` file at the root
-of your UEFN project (next to the `.uefnproject` file — create the `Config`
-folder if it doesn't exist) containing:
+Once that's done, **start a new Claude Code session** in this folder (MCP
+servers only connect when a session starts). Then open UEFN with your
+project loaded and paste this:
 
-```ini
-[/Script/PythonScriptPlugin.PythonScriptPluginSettings]
-bRemoteExecution=True
-RemoteExecutionMulticastGroupEndpoint=239.0.0.1:6766
-RemoteExecutionMulticastBindAddress=127.0.0.1
-RemoteExecutionMulticastTtl=0
-```
+> Set up my UEFN project for remote execution.
 
-This setting is only read at editor startup, so **restart UEFN** after
-creating/editing this file for it to take effect.
+Claude will find your project on disk and turn on the setting UEFN needs
+(it's off by default). If UEFN was already open, Claude will tell you to
+restart it — this setting only takes effect on startup.
 
-## Install
+Once UEFN is back up with your project loaded, you're ready to build.
 
-```powershell
-uv sync
-```
+## What to ask Claude to do
 
-## Run standalone (for testing)
+Once it's set up, just describe what you want in your own words. For example:
 
-```powershell
-uv run uefn-mcp
-```
+> Show me everything currently placed in my level
 
-## Register with Claude Code
+> Spawn a chest at the center of the map
 
-```powershell
-claude mcp add uefn -- uv --directory "<path to this repo>" run uefn-mcp
-```
+> Move the actor called "SpawnPoint_1" up by 200 units
 
-Then, with UEFN open and your project loaded, ask Claude to list actors,
-spawn props, move things around, etc.
+> Duplicate "Tree_03" and offset the copy to the side
 
-## Tools
+> What props/devices are available in my content browser?
 
-- `execute_python(code, mode)` — escape hatch to run arbitrary Python in the
-  editor (`mode` is `"file"`, `"statement"`, or `"eval"`). Use this to explore
-  `unreal.EditorAssetLibrary` for Fortnite device/prop class paths not covered
-  by the other tools.
-- `get_editor_status()` — connectivity + project/level/engine info.
-- `list_actors(class_name?, limit?)` — list actors in the loaded level.
-- `get_selected_actors()` — actors currently selected in the editor.
-- `spawn_actor(class_path, location?, rotation?, scale?, label?)` — place an
-  actor (native class or Blueprint asset path).
-- `delete_actor(label)`
-- `get_actor_transform(label)` / `set_actor_transform(label, location?, rotation?, scale?)`
-- `duplicate_actor(label, offset?, new_label?)`
-- `list_content_assets(path?, class_names?, recursive?, limit?)` — browse the
-  content browser.
-- `save_level(all_dirty?)`
+> Save the level
 
-## Notes / limitations
+If Claude gets stuck because it doesn't know the exact name of a Fortnite
+device or prop, it can look through your content browser itself to find it
+— you don't need to know Unreal or Python to use any of this.
 
-- Only one editor instance can be connected to at a time (the discovery step
-  picks the first one it finds).
-- Actor lookups are by editor label (World Outliner name), which isn't
-  guaranteed unique; the first match wins.
-- UEFN-specific device classes (the Fortnite Creative gallery) aren't
-  hardcoded here — use `list_content_assets` or `execute_python` to find the
-  class path for a given device/prop, then pass it to `spawn_actor`.
-- Requires the `mcp` Python SDK v2.x (`mcp.server.mcpserver.MCPServer`).
+## Limitations
+
+- Only one UEFN instance can be connected at a time — if you have more than
+  one open, Claude connects to whichever one it finds first.
+- Claude finds things you've placed by their name in the World Outliner, so
+  giving actors clear, unique names helps it find the right one.

@@ -7,6 +7,9 @@ remote execution protocol. The editor must be open with a project loaded and
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 from mcp.server.mcpserver import MCPServer
 
 from . import remote_execution as re
@@ -15,6 +18,184 @@ from .bridge import UEFNConnectionError, extract_output_text, get_bridge
 mcp = MCPServer("uefn-mcp")
 
 Vec3 = dict[str, float]
+
+
+# ---------------------------------------------------------------------------
+# Project setup (local filesystem only — no running editor/connection needed)
+# ---------------------------------------------------------------------------
+
+_REMOTE_EXEC_SECTION = "/Script/PythonScriptPlugin.PythonScriptPluginSettings"
+_REMOTE_EXEC_SETTINGS = {
+    "bRemoteExecution": "True",
+    "RemoteExecutionMulticastGroupEndpoint": "239.0.0.1:6766",
+    "RemoteExecutionMulticastBindAddress": "127.0.0.1",
+    "RemoteExecutionMulticastTtl": "0",
+}
+
+
+def _apply_remote_execution_settings(text: str, force: bool) -> tuple[str, bool, list[str]]:
+    """Ensure a DefaultEngine.ini's contents have the Python remote execution
+    section/keys set, editing around whatever else is already in the file.
+
+    Returns (new_text, changed, conflicting_keys).
+    """
+    lines = text.splitlines()
+    header = f"[{_REMOTE_EXEC_SECTION}]"
+    section_start = next((i for i, line in enumerate(lines) if line.strip() == header), None)
+
+    if section_start is None:
+        block = [header] + [f"{k}={v}" for k, v in _REMOTE_EXEC_SETTINGS.items()]
+        pad = [""] if lines and lines[-1].strip() else []
+        new_lines = lines + pad + block
+        return "\n".join(new_lines) + "\n", True, []
+
+    section_end = len(lines)
+    for i in range(section_start + 1, len(lines)):
+        if lines[i].strip().startswith("["):
+            section_end = i
+            break
+
+    existing: dict[str, tuple[int, str]] = {}
+    for i in range(section_start + 1, section_end):
+        if "=" in lines[i]:
+            key, _, value = lines[i].partition("=")
+            existing[key.strip()] = (i, value.strip())
+
+    changed = False
+    conflicts: list[str] = []
+    insert_at = section_end
+    for key, desired in _REMOTE_EXEC_SETTINGS.items():
+        if key in existing:
+            idx, current = existing[key]
+            if current != desired:
+                if force:
+                    lines[idx] = f"{key}={desired}"
+                    changed = True
+                else:
+                    conflicts.append(key)
+        else:
+            lines.insert(insert_at, f"{key}={desired}")
+            insert_at += 1
+            section_end += 1
+            changed = True
+
+    return "\n".join(lines) + "\n", changed, conflicts
+
+
+def _find_uefn_projects(root: Path, max_depth: int) -> list[Path]:
+    root_depth = len(root.parts)
+    found: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        if len(Path(dirpath).parts) - root_depth >= max_depth:
+            dirnames[:] = []
+        found.extend(Path(dirpath) / name for name in filenames if name.endswith(".uefnproject"))
+    return found
+
+
+@mcp.tool()
+def find_uefn_projects(search_paths: list[str] | None = None, max_depth: int = 6) -> list[dict]:
+    """Search the filesystem for UEFN projects (folders containing a
+    `.uefnproject` file), so a project can be located without needing its
+    path hardcoded or guessed at.
+
+    Args:
+        search_paths: Directories to search under. Defaults to the current
+            user's home directory when not given — pass explicit path(s)
+            (e.g. a known projects folder) for a faster, narrower search.
+        max_depth: How many directory levels below each search path to
+            descend. Kept shallow by default since a full home-directory
+            walk is slow.
+
+    Returns:
+        List of dicts with `project_file` and `project_root` for each
+        `.uefnproject` found.
+    """
+    roots = [Path(p).expanduser() for p in search_paths] if search_paths else [Path.home()]
+    seen: set[Path] = set()
+    results = []
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for path in _find_uefn_projects(root, max_depth):
+            if path in seen:
+                continue
+            seen.add(path)
+            results.append({"project_file": str(path), "project_root": str(path.parent)})
+    return results
+
+
+@mcp.tool()
+def setup_uefn_project(project_path: str, force: bool = False) -> dict:
+    """One-time setup that enables Python remote execution for a UEFN project,
+    so this MCP server can connect to it once opened in the editor.
+
+    Writes/updates `Config/DefaultEngine.ini` inside the project with the
+    `[/Script/PythonScriptPlugin.PythonScriptPluginSettings]` section
+    (bRemoteExecution=True and the multicast discovery settings), leaving any
+    other settings already in that file untouched. This is a local file edit
+    only — it does not require UEFN to be running. UEFN only reads this file
+    at startup, so the editor must be (re)started afterward for it to take
+    effect.
+
+    Args:
+        project_path: Path to the UEFN project folder (the one containing
+            the `.uefnproject` file), or the `.uefnproject` file itself.
+        force: If the ini already sets one of these keys to a different
+            value, overwrite it. Otherwise such conflicts are left alone and
+            reported back instead of being changed.
+
+    Returns:
+        dict with `success`, `project_file`, `ini_path`, `changed` (bool),
+        `conflicts` (keys left unchanged because they already had a
+        different value), and `restart_required`.
+    """
+    p = Path(project_path).expanduser()
+    if p.is_file() and p.suffix == ".uefnproject":
+        project_root = p.parent
+    elif p.is_dir():
+        project_root = p
+    else:
+        return {"success": False, "error": f"Path not found: {project_path}"}
+
+    uefnprojects = list(project_root.glob("*.uefnproject"))
+    if not uefnprojects:
+        return {
+            "success": False,
+            "error": (
+                f"No .uefnproject file found in {project_root}. Pass the "
+                "project folder that contains it, or the .uefnproject file itself."
+            ),
+        }
+
+    config_dir = project_root / "Config"
+    config_dir.mkdir(exist_ok=True)
+    ini_path = config_dir / "DefaultEngine.ini"
+
+    existing_text = ini_path.read_text(encoding="utf-8") if ini_path.exists() else ""
+    new_text, changed, conflicts = _apply_remote_execution_settings(existing_text, force)
+
+    if changed:
+        ini_path.write_text(new_text, encoding="utf-8")
+
+    if conflicts:
+        message = (
+            f"Existing conflicting values for {conflicts} were left unchanged; "
+            "call again with force=True to overwrite them."
+        )
+    elif changed:
+        message = "Remote execution enabled. Restart UEFN for it to take effect."
+    else:
+        message = "Remote execution was already enabled; no changes made."
+
+    return {
+        "success": True,
+        "project_file": str(uefnprojects[0]),
+        "ini_path": str(ini_path),
+        "changed": changed,
+        "conflicts": conflicts,
+        "restart_required": changed,
+        "message": message,
+    }
 
 
 # ---------------------------------------------------------------------------
