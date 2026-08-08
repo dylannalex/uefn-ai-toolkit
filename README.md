@@ -58,3 +58,8 @@ device or prop, it can look through your content browser itself to find it
   one open, Claude connects to whichever one it finds first.
 - Claude finds things you've placed by their name in the World Outliner, so
   giving actors clear, unique names helps it find the right one.
+
+## How it works
+
+See [docs/](docs/) for a deeper look at the architecture, the wire protocol
+this talks to UEFN, and a traced example of a tool call end to end.
