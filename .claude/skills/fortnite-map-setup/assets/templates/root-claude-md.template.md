@@ -9,6 +9,19 @@ that survives between sessions, since Claude has no memory of the live editor
 between conversations and the binary UEFN files can't be diffed or reviewed
 in a PR.
 
+## Skills available here
+
+This workspace has its own Claude Code skills under `.claude/skills/`,
+installed by `uefn-mcp`'s `fortnite-map-setup` skill:
+
+- **new-map-project** — scaffold a new project subfolder.
+- **load-map-project** — resume work on an existing project subfolder.
+
+These are self-contained (they don't depend on the `uefn-mcp` checkout
+being present), so a Claude Code session opened directly in this folder can
+use them on its own. The `uefn` MCP server they call is registered at user
+scope, so it's reachable from here regardless of working directory.
+
 ## Layout
 
 One subfolder per UEFN project, named to match the project. Each contains:

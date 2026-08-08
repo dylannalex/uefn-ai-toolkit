@@ -18,7 +18,12 @@ Open a terminal in this folder, start Claude Code, and paste this:
 > Install and register the uefn-mcp server with Claude Code: check whether
 > `uv` is installed and install it if it's missing, run `uv sync` in this
 > folder, then run
-> `claude mcp add uefn -- uv --directory "$(pwd)" run uefn-mcp`.
+> `claude mcp add uefn --scope user -- uv --directory "$(pwd)" run uefn-mcp`.
+
+`--scope user` registers the server globally instead of tying it to this one
+folder, so it's also available from other working directories — e.g. a
+`fortnite-maps` notes workspace set up via the `fortnite-map-setup` skill
+(see [docs/](docs/)).
 
 Once that's done, **start a new Claude Code session** in this folder (MCP
 servers only connect when a session starts). Then open UEFN with your

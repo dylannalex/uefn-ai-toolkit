@@ -15,8 +15,8 @@ stops on its own**, once per session, only if the server is registered.
 
 ## So how does it get started?
 
-`claude mcp add uefn -- uv --directory "<repo path>" run uefn-mcp` (the setup
-step from the README) doesn't start anything by itself — it just writes a
+`claude mcp add uefn --scope user -- uv --directory "<repo path>" run uefn-mcp`
+(the setup step from the README) doesn't start anything by itself — it just writes a
 launch command into Claude Code's config
 (`~/.claude.json`, see [setup.md](setup.md) for the scope details).
 

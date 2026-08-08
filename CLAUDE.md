@@ -15,7 +15,7 @@ code runs inside UEFN beyond what ships with the engine.
 ```powershell
 uv sync                  # install deps
 uv run uefn-mcp           # run the server standalone (for manual testing)
-claude mcp add uefn -- uv --directory "<path to this repo>" run uefn-mcp
+claude mcp add uefn --scope user -- uv --directory "<path to this repo>" run uefn-mcp
 ```
 
 There are no tests, lint, or type-check configs in this repo currently.
