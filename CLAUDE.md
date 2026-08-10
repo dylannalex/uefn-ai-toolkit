@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**Read [docs/INDEX.md](docs/INDEX.md) before consulting anything else under `docs/`** — it routes to the right doc by task ("how do I add item content to a device", "is this setting scriptable", "how do I add a new tool", etc.) instead of requiring you to know which file has the answer.
+
 ## What this is
 
 An MCP server that drives a running UEFN (Unreal Editor for Fortnite) instance
@@ -60,9 +62,16 @@ what the MCP client sees to decide when/how to call the tool.
 
 ## UEFN prerequisite
 
-Unlike stock Unreal Editor, UEFN ships with Python remote execution **off**
-by default. It requires a `Config/DefaultEngine.ini` in the target UEFN
-project (next to the `.uefnproject` file) with:
+Unlike stock Unreal Editor, UEFN ships with **two** independent Python
+switches off by default, and both have to be on or discovery just silently
+never hears a `pong` — there's no error that distinguishes "plugin inactive"
+from "plugin active but not listening."
+
+1. **Python Scripting itself** (Project Settings > Python in the UEFN UI) —
+   `bEnablePythonForProject` under `dataSets.experimental.pythonExperimental`
+   in the `.uefnproject` JSON file.
+2. **Remote execution** for that plugin — a `Config/DefaultEngine.ini` in the
+   target UEFN project (next to the `.uefnproject` file) with:
 
 ```ini
 [/Script/PythonScriptPlugin.PythonScriptPluginSettings]
@@ -72,9 +81,11 @@ RemoteExecutionMulticastBindAddress=127.0.0.1
 RemoteExecutionMulticastTtl=0
 ```
 
-This is only read at editor startup, so UEFN must be restarted after
-creating/editing that file. Only one editor instance can be connected to at a
-time — discovery picks the first node it finds.
+`setup_uefn_project` sets both. Both are only read at editor startup, so
+UEFN must be restarted after creating/editing either file — including when
+Python Scripting was turned on by hand in the UEFN UI while the editor was
+already running. Only one editor instance can be connected to at a time —
+discovery picks the first node it finds.
 
 ## Working with `unreal.*` APIs
 
@@ -84,3 +95,13 @@ against a live UEFN instance to explore `unreal.EditorAssetLibrary`,
 `unreal.EditorActorSubsystem`, etc., and to discover Fortnite
 device/Blueprint class paths (they aren't hardcoded anywhere in this repo)
 before wiring a new dedicated tool around them.
+
+Before concluding some Fortnite Creative device setting can only be changed
+by hand in the Details panel, read
+[docs/gotchas/user-options.md](docs/gotchas/user-options.md) — most
+"V2" device settings that look read-only from Python (the "User Options"
+system) are actually writable via `set_editor_property` using the option's
+exact key name, not the runtime-only `set_user_option_value`. The rest of
+`docs/gotchas/` tracks other non-obvious `unreal.*` behavior worth knowing
+before wiring a new tool around it (see [docs/INDEX.md](docs/INDEX.md) for
+the full list); add to it whenever a session turns up another gotcha.

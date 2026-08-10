@@ -23,7 +23,7 @@ Open a terminal in this folder, start Claude Code, and paste this:
 `--scope user` registers the server globally instead of tying it to this one
 folder, so it's also available from other working directories — e.g. a
 `fortnite-maps` notes workspace set up via the `fortnite-map-setup` skill
-(see [docs/](docs/)).
+(see [docs/INDEX.md](docs/INDEX.md)).
 
 Once that's done, **start a new Claude Code session** in this folder (MCP
 servers only connect when a session starts). Then open UEFN with your
@@ -31,9 +31,10 @@ project loaded and paste this:
 
 > Set up my UEFN project for remote execution.
 
-Claude will find your project on disk and turn on the setting UEFN needs
-(it's off by default). If UEFN was already open, Claude will tell you to
-restart it — this setting only takes effect on startup.
+Claude will find your project on disk and turn on the two settings UEFN
+needs — Python Scripting itself (Project Settings > Python) and remote
+execution for it — both off by default. If UEFN was already open, Claude
+will tell you to restart it — these settings only take effect on startup.
 
 Once UEFN is back up with your project loaded, you're ready to build.
 
@@ -66,5 +67,5 @@ device or prop, it can look through your content browser itself to find it
 
 ## How it works
 
-See [docs/](docs/) for a deeper look at the architecture, the wire protocol
-this talks to UEFN, and a traced example of a tool call end to end.
+See [docs/INDEX.md](docs/INDEX.md) for a deeper look at the architecture, the wire
+protocol this talks to UEFN, and a traced example of a tool call end to end.

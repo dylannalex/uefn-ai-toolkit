@@ -1,9 +1,6 @@
 # The remote execution protocol
 
-This is Epic's protocol, implemented (not designed) by
-[`remote_execution.py`](../src/uefn_mcp/remote_execution.py). It's the same
-protocol behind Unreal's "Remote Execution" Python console feature — UEFN
-just ships it turned off by default (see [setup.md](setup.md)).
+This is Epic's protocol, implemented (not designed) by [`remote_execution.py`](../src/uefn_mcp/remote_execution.py). It's the same protocol behind Unreal's "Remote Execution" Python console feature — UEFN just ships it turned off by default (see [setup.md](setup.md)).
 
 Two channels are involved, for two different jobs:
 
@@ -27,13 +24,7 @@ Every message on both channels is UTF-8 JSON with a common envelope:
 
 ## 1. Discovery (UDP)
 
-`uefn-mcp` and the UEFN editor both join the same UDP multicast group
-(`239.0.0.1:6766` by default — must match the project's
-`RemoteExecutionMulticastGroupEndpoint` setting). `uefn-mcp` broadcasts a
-`ping` once a second; every listening editor instance replies with a `pong`
-carrying its node ID. `uefn-mcp` (via `UEFNBridge.connect()`) waits up to 5
-seconds and then picks the first node it heard from — if two UEFN instances
-are open, whichever answers first wins.
+`uefn-mcp` and the UEFN editor both join the same UDP multicast group (`239.0.0.1:6766` by default — must match the project's `RemoteExecutionMulticastGroupEndpoint` setting). `uefn-mcp` broadcasts a `ping` once a second; every listening editor instance replies with a `pong` carrying its node ID. `uefn-mcp` (via `UEFNBridge.connect()`) waits up to 5 seconds and then picks the first node it heard from — if two UEFN instances are open, whichever answers first wins.
 
 ```mermaid
 sequenceDiagram
@@ -52,10 +43,7 @@ sequenceDiagram
 
 ## 2. Opening a command connection (UDP → TCP)
 
-Once a node is chosen, `uefn-mcp` starts listening on a local TCP port
-(`127.0.0.1:6776` by default) and broadcasts an `open_connection` message
-addressed to that node's ID, telling it where to connect. The editor then
-initiates the actual TCP connection back to `uefn-mcp`.
+Once a node is chosen, `uefn-mcp` starts listening on a local TCP port (`127.0.0.1:6776` by default) and broadcasts an `open_connection` message addressed to that node's ID, telling it where to connect. The editor then initiates the actual TCP connection back to `uefn-mcp`.
 
 ```mermaid
 sequenceDiagram
@@ -69,15 +57,11 @@ sequenceDiagram
     Note over C,E: TCP command channel is now open
 ```
 
-`uefn-mcp` retries this handshake up to 6 times (5s apart, 30s total) before
-giving up — this is where the "No running Unreal/UEFN editor was discovered"
-error comes from if the editor isn't listening.
+`uefn-mcp` retries this handshake up to 6 times (5s apart, 30s total) before giving up — this is where the "No running Unreal/UEFN editor was discovered" error comes from if the editor isn't listening.
 
 ## 3. Running a command (TCP)
 
-Every tool call boils down to one round-trip on the open TCP channel: send a
-`command` message containing the Python source and an execution mode, get
-back one `command_result` message.
+Every tool call boils down to one round-trip on the open TCP channel: send a `command` message containing the Python source and an execution mode, get back one `command_result` message.
 
 ```mermaid
 sequenceDiagram
@@ -91,17 +75,8 @@ sequenceDiagram
 
 `exec_mode` is one of:
 
-- **`ExecuteFile`** (default, used for everything except `execute_python`'s
-  `statement`/`eval` modes) — runs the source as a full script, so it can
-  contain multiple statements, imports, function defs, etc.
+- **`ExecuteFile`** (default, used for everything except `execute_python`'s `statement`/`eval` modes) — runs the source as a full script, so it can contain multiple statements, imports, function defs, etc.
 - **`ExecuteStatement`** — runs and prints a single statement.
-- **`ExecuteStatement`/`EvaluateStatement`** — evaluates a single expression
-  and returns its value directly, without needing a `print`.
+- **`ExecuteStatement`/`EvaluateStatement`** — evaluates a single expression and returns its value directly, without needing a `print`.
 
-`command_result.output` is a list of `{output: "..."}` chunks — this is
-whatever the script printed or logged, concatenated in `bridge.py` via
-`extract_output_text`. `command_result.success` reflects whether the script
-raised an unhandled exception, not whether your code's own logic "worked" —
-a script that runs to completion but produces a `result = {'success': False,
-...}` dict (as most tools in `server.py` do on a lookup miss) still reports
-`success: True` at the protocol level.
+`command_result.output` is a list of `{output: "..."}` chunks — this is whatever the script printed or logged, concatenated in `bridge.py` via `extract_output_text`. `command_result.success` reflects whether the script raised an unhandled exception, not whether your code's own logic "worked" — a script that runs to completion but produces a `result = {'success': False, ...}` dict (as most tools in `server.py` do on a lookup miss) still reports `success: True` at the protocol level.
