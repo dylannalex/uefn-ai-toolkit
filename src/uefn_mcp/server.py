@@ -7,6 +7,7 @@ remote execution protocol. The editor must be open with a project loaded and
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -82,6 +83,26 @@ def _apply_remote_execution_settings(text: str, force: bool) -> tuple[str, bool,
     return "\n".join(lines) + "\n", changed, conflicts
 
 
+def _ensure_python_scripting_enabled(data: dict) -> bool:
+    """Ensure a parsed .uefnproject JSON has Python Scripting turned on
+    (`dataSets.experimental.pythonExperimental.bEnablePythonForProject`).
+
+    This is UEFN's "Python Scripting" toggle under Project Settings > Python
+    — a *separate* switch from the DefaultEngine.ini remote-execution keys
+    `_apply_remote_execution_settings` writes. Remote execution has no effect
+    until this one is also on; without it, `bRemoteExecution=True` silently
+    does nothing and the editor never listens for a connection. Returns
+    whether a change was made.
+    """
+    python_experimental = (
+        data.setdefault("dataSets", {}).setdefault("experimental", {}).setdefault("pythonExperimental", {})
+    )
+    if python_experimental.get("bEnablePythonForProject") is True:
+        return False
+    python_experimental["bEnablePythonForProject"] = True
+    return True
+
+
 def _find_uefn_projects(root: Path, max_depth: int) -> list[Path]:
     root_depth = len(root.parts)
     found: list[Path] = []
@@ -126,27 +147,39 @@ def find_uefn_projects(search_paths: list[str] | None = None, max_depth: int = 6
 
 @mcp.tool()
 def setup_uefn_project(project_path: str, force: bool = False) -> dict:
-    """One-time setup that enables Python remote execution for a UEFN project,
-    so this MCP server can connect to it once opened in the editor.
+    """One-time setup that enables Python scripting + remote execution for a
+    UEFN project, so this MCP server can connect to it once opened in the
+    editor. Two independent switches have to be on, and this flips both:
 
-    Writes/updates `Config/DefaultEngine.ini` inside the project with the
-    `[/Script/PythonScriptPlugin.PythonScriptPluginSettings]` section
-    (bRemoteExecution=True and the multicast discovery settings), leaving any
-    other settings already in that file untouched. This is a local file edit
-    only — it does not require UEFN to be running. UEFN only reads this file
-    at startup, so the editor must be (re)started afterward for it to take
-    effect.
+    1. **Python Scripting itself** (Project Settings > Python in the UEFN
+       UI) — sets `bEnablePythonForProject=true` under
+       `dataSets.experimental.pythonExperimental` in the `.uefnproject` JSON.
+       Without this, the plugin isn't even active, so remote execution has
+       no effect regardless of what the ini says.
+    2. **Remote execution** for that plugin — writes/updates
+       `Config/DefaultEngine.ini` with the
+       `[/Script/PythonScriptPlugin.PythonScriptPluginSettings]` section
+       (bRemoteExecution=True and the multicast discovery settings), leaving
+       any other settings already in that file untouched.
+
+    Both are local file edits only — neither requires UEFN to be running.
+    Both are only read at editor startup, so the editor must be (re)started
+    afterward for either to take effect.
 
     Args:
         project_path: Path to the UEFN project folder (the one containing
             the `.uefnproject` file), or the `.uefnproject` file itself.
-        force: If the ini already sets one of these keys to a different
+        force: If the ini already sets one of its keys to a different
             value, overwrite it. Otherwise such conflicts are left alone and
-            reported back instead of being changed.
+            reported back instead of being changed. Has no effect on the
+            `.uefnproject` Python Scripting flag, which is only ever turned
+            on, never overwritten.
 
     Returns:
-        dict with `success`, `project_file`, `ini_path`, `changed` (bool),
-        `conflicts` (keys left unchanged because they already had a
+        dict with `success`, `project_file`, `ini_path`, `changed` (bool,
+        true if either file was modified), `python_scripting_enabled`
+        (bool, whether the `.uefnproject` flag needed setting),
+        `conflicts` (ini keys left unchanged because they already had a
         different value), and `restart_required`.
     """
     p = Path(project_path).expanduser()
@@ -167,15 +200,24 @@ def setup_uefn_project(project_path: str, force: bool = False) -> dict:
             ),
         }
 
+    uefnproject_path = uefnprojects[0]
+    project_data = json.loads(uefnproject_path.read_text(encoding="utf-8"))
+    python_scripting_enabled = _ensure_python_scripting_enabled(project_data)
+    if python_scripting_enabled:
+        serialized = json.dumps(project_data, indent="\t").replace("\n", "\r\n")
+        uefnproject_path.write_text(serialized, encoding="utf-8")
+
     config_dir = project_root / "Config"
     config_dir.mkdir(exist_ok=True)
     ini_path = config_dir / "DefaultEngine.ini"
 
     existing_text = ini_path.read_text(encoding="utf-8") if ini_path.exists() else ""
-    new_text, changed, conflicts = _apply_remote_execution_settings(existing_text, force)
+    new_text, ini_changed, conflicts = _apply_remote_execution_settings(existing_text, force)
 
-    if changed:
+    if ini_changed:
         ini_path.write_text(new_text, encoding="utf-8")
+
+    changed = python_scripting_enabled or ini_changed
 
     if conflicts:
         message = (
@@ -183,15 +225,16 @@ def setup_uefn_project(project_path: str, force: bool = False) -> dict:
             "call again with force=True to overwrite them."
         )
     elif changed:
-        message = "Remote execution enabled. Restart UEFN for it to take effect."
+        message = "Python scripting + remote execution enabled. Restart UEFN for it to take effect."
     else:
-        message = "Remote execution was already enabled; no changes made."
+        message = "Python scripting and remote execution were already enabled; no changes made."
 
     return {
         "success": True,
-        "project_file": str(uefnprojects[0]),
+        "project_file": str(uefnproject_path),
         "ini_path": str(ini_path),
         "changed": changed,
+        "python_scripting_enabled": python_scripting_enabled,
         "conflicts": conflicts,
         "restart_required": changed,
         "message": message,
