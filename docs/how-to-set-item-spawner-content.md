@@ -68,6 +68,33 @@ assets = registry.get_assets_by_path("/Game/Athena/Items/Weapons", recursive=Tru
 weapons = [a for a in assets if str(a.asset_class_path.asset_name) == 'FortWeaponRangedItemDefinition']
 ```
 
+**Matching a colloquial item name ("Pump Shotgun") to an asset**: the asset name itself rarely matches (`WID_Shotgun_Standard_Athena_C_Ore_T03`). Two registry tags solve this *without loading every candidate* — much faster than loading hundreds of assets to read `ItemName`:
+
+```python
+asset_data.get_tag_value("DisplayName")  # e.g. "Pump Shotgun" — the in-game item name
+asset_data.get_tag_value("Rarity")       # "0".."5" = Common, Uncommon, Rare, Epic, Legendary, Mythic
+```
+
+Confirmed empirically (SkyWars, session 8) by cross-referencing the `Rarity` tag against the filename's tier-code suffix (`_C_`/`_UC_`/`_R_`/`_VR_`/`_SR_`/`_UR_`) on plain, non-seasonal weapon families, where the two agree. **They stop agreeing once a weapon is part of a seasonal "Ore" upgrade-tier system** (`_Ore_T0X` in the name) — those can have a filename suffix that doesn't match the actual `Rarity` tag. **Trust the `Rarity` tag, not the filename**, whenever the two disagree.
+
+Several current-gen healing items (Bandages, Med Kit, Shield Potion, Small Shield Potion, Chug Jug) only exist with a `DisplayName` prefixed "Legacy" (e.g. `Athena_Bandage` → "Legacy Bandage"). That's still the real, working, loadable asset for that item — don't skip it looking for a non-prefixed version that doesn't exist.
+
+**Critical gotcha: the asset registry lists assets this project can't actually load.** A registry hit (a `get_assets_by_path` result, a `DisplayName`/`Rarity` tag) is not proof the asset is usable — confirmed on SkyWars where every asset under `/Game/Athena/Items/Consumables/ForagedItemVersions` (Apple, Banana, Coconut, Shield Mushroom, Bouncy Egg, etc.) has full registry tags and shows up in searches, but `unreal.load_asset(path)` returns `None` for every one of them. Always verify with a real `load_asset()` call (non-`None` result) before writing an asset path into `ToSpawnList` — don't stop at "the registry found it."
+
+**Second, more dangerous gotcha: `load_asset()` succeeding is *still* not proof the asset is allowed.** Some assets load fine, set into `ToSpawnList` without error, read back correctly, and *only* surface a problem later as an "Asset Check" message-log warning ("Illegal References to Default" / a `FortValidator_FortExposedActors` "references disallowed object" error) — this is a real Creative-content allowlist restriction (some standard-looking BR weapon variants, e.g. SpyTech-reskinned or certain plain non-"Ore" weapon defs, aren't on the exposed/allowed list for external Creative islands), not a duplication artifact or a false alarm. It does **not** show up immediately — it can take a save, or simply not surface in the visible Message Log until the user happens to look. Confirmed on SkyWars (session 8): `WID_Spytech_Pistol_SemiAuto_Suppressed_Athena_R_Ore_T03`, `WID_Shotgun_SemiAuto_Athena_C`, and `/Game/Items/ResourcePickups/Athena_WoodItemData` all loaded and set cleanly but are disallowed; sibling variants (`WID_Pistol_SemiAuto_Suppressed_Athena_UC_Ore_T03`, `WID_Shotgun_SemiAuto_Athena_UC_Ore_T03`, `/Game/Items/ResourcePickups/WoodItemData`) are functionally identical and pass.
+
+**Don't rely on the Message Log to catch this — validate directly, in Python, before committing:**
+
+```python
+evs = unreal.get_editor_subsystem(unreal.EditorValidatorSubsystem)
+result, errors, warnings = evs.is_object_valid(actor, unreal.DataValidationUsecase.MANUAL)
+# result == unreal.DataValidationResult.VALID means clean; errors are text, contain the exact disallowed path if not
+```
+
+This runs the *same* validators the editor's Message Log uses (including `FortValidator_FortExposedActors`), but synchronously and against a specific actor, with no UI round-trip. Use it two ways:
+1. **Audit everything already placed** — loop over all actors of interest and call this to find every disallowed reference in one pass, not just whatever the Message Log happened to show.
+2. **Pre-validate a candidate replacement before writing it in** — temporarily set the candidate on a scratch actor (or the real one, since you can revert in-memory before saving), call `is_object_valid`, and only keep it if `VALID`. This is dramatically faster than the old workflow of writing, saving, hoping the Message Log surfaces it, then asking a human to eyeball the warning text.
+
 ## After setting it
 
 - **Read back to confirm** — `comp.get_editor_property("ToSpawnList")` — and **save with the `save_level` MCP tool**, not a raw engine save call.

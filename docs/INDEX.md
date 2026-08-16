@@ -9,6 +9,8 @@ How `uefn-mcp` actually works, under the hood, and where to look for a specific 
 | Add or change what item a device spawns/grants | [how-to-set-item-spawner-content.md](how-to-set-item-spawner-content.md) |
 | Figure out if some device setting is scriptable at all | [gotchas/user-options.md](gotchas/user-options.md) (bools/numbers/enums), then [gotchas/item-content/index.md](gotchas/item-content/index.md) (item/weapon content specifically) |
 | Wire one device to trigger another | [gotchas/event-wiring.md](gotchas/event-wiring.md) |
+| Move, rescale or reposition placed actors — **read before any bulk transform work** | [gotchas/transform-persistence.md](gotchas/transform-persistence.md) |
+| Spawn/configure a project's own compiled Verse `creative_device`, or bind a native device into its `@editable` fields | [how-to-spawn-and-wire-custom-verse-devices.md](how-to-spawn-and-wire-custom-verse-devices.md) |
 | Set up a new UEFN project for `uefn-mcp` | [setup.md](setup.md) |
 | Understand the MCP↔bridge↔UEFN protocol end to end | [architecture.md](architecture.md) → [mcp-basics.md](mcp-basics.md) → [protocol.md](protocol.md) → [request-lifecycle.md](request-lifecycle.md) |
 | Add a new `@mcp.tool()` | [architecture.md](architecture.md)'s `server.py` section, plus the root [`CLAUDE.md`](../CLAUDE.md) |
@@ -23,10 +25,12 @@ How `uefn-mcp` actually works, under the hood, and where to look for a specific 
 - **[request-lifecycle.md](request-lifecycle.md)** — one tool call (`spawn_actor`) traced end to end.
 - **[setup.md](setup.md)** — what `setup_uefn_project` and `claude mcp add` change on disk, and why both need a restart.
 - **[how-to-set-item-spawner-content.md](how-to-set-item-spawner-content.md)** — the current, working method for scripting Item Spawner V3 content.
+- **[how-to-spawn-and-wire-custom-verse-devices.md](how-to-spawn-and-wire-custom-verse-devices.md)** — spawning a project's own compiled Verse `creative_device`, reading/writing its `@editable` fields, the native-device-binding wall, and the Verse-tag workaround.
 - **[gotchas/user-options.md](gotchas/user-options.md)** — Fortnite Creative "User Options" are settable via `set_editor_property`, not `set_user_option_value`.
 - **[gotchas/event-wiring.md](gotchas/event-wiring.md)** — device-to-device event hookups are Details-panel-only from Python; Verse can do it but can't be built headlessly.
 - **[gotchas/item-content/index.md](gotchas/item-content/index.md)** — the full multi-pass investigation into whether item/weapon content is ever scriptable.
-- **[gotchas/misc.md](gotchas/misc.md)** — smaller one-off findings (basic-shape mesh spawning, stale `uefn-mcp.exe` processes).
+- **[gotchas/transform-persistence.md](gotchas/transform-persistence.md)** — moving a placed actor silently fails to save without `actor.modify()`, and leaves its collision body behind; plus how to verify a move for real.
+- **[gotchas/misc.md](gotchas/misc.md)** — smaller one-off findings (basic-shape mesh spawning, stale `uefn-mcp.exe` processes, `is_object_valid`'s tuple return).
 
 ## The one-paragraph version
 
