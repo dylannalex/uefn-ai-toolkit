@@ -11,6 +11,7 @@ How `uefn-mcp` actually works, under the hood, and where to look for a specific 
 | Wire one device to trigger another | [gotchas/event-wiring.md](gotchas/event-wiring.md) |
 | Move, rescale or reposition placed actors — **read before any bulk transform work** | [gotchas/transform-persistence.md](gotchas/transform-persistence.md) |
 | Spawn/configure a project's own compiled Verse `creative_device`, or bind a native device into its `@editable` fields | [how-to-spawn-and-wire-custom-verse-devices.md](how-to-spawn-and-wire-custom-verse-devices.md) |
+| See the map for yourself instead of asking the user for a screenshot | [how-to-screenshot-the-level.md](how-to-screenshot-the-level.md) |
 | Set up a new UEFN project for `uefn-mcp` | [setup.md](setup.md) |
 | Understand the MCP↔bridge↔UEFN protocol end to end | [architecture.md](architecture.md) → [mcp-basics.md](mcp-basics.md) → [protocol.md](protocol.md) → [request-lifecycle.md](request-lifecycle.md) |
 | Add a new `@mcp.tool()` | [architecture.md](architecture.md)'s `server.py` section, plus the root [`CLAUDE.md`](../CLAUDE.md) |
@@ -24,6 +25,7 @@ How `uefn-mcp` actually works, under the hood, and where to look for a specific 
 - **[protocol.md](protocol.md)** — the wire protocol `uefn-mcp` speaks to UEFN (Epic's, not invented here): UDP discovery, then a TCP command channel.
 - **[request-lifecycle.md](request-lifecycle.md)** — one tool call (`spawn_actor`) traced end to end.
 - **[setup.md](setup.md)** — what `setup_uefn_project` and `claude mcp add` change on disk, and why both need a restart.
+- **[how-to-screenshot-the-level.md](how-to-screenshot-the-level.md)** — render the level to a PNG from Python via `SceneCapture2D`, so Claude can look at the map itself. Supersedes the `HighResShot` dead end.
 - **[how-to-set-item-spawner-content.md](how-to-set-item-spawner-content.md)** — the current, working method for scripting Item Spawner V3 content.
 - **[how-to-spawn-and-wire-custom-verse-devices.md](how-to-spawn-and-wire-custom-verse-devices.md)** — spawning a project's own compiled Verse `creative_device`, reading/writing its `@editable` fields, the native-device-binding wall, and the Verse-tag workaround.
 - **[gotchas/user-options.md](gotchas/user-options.md)** — Fortnite Creative "User Options" are settable via `set_editor_property`, not `set_user_option_value`.
