@@ -61,6 +61,18 @@ exposure to manual; `auto_exposure_bias = 11.0` matched the UEFN viewport
 closely on a bright outdoor map. Re-check the bias if the map's lighting is
 very dark or very bright.
 
+## What it does *not* see
+
+`SceneCapture2D` renders the world the way the game renders it, which means
+**editor-only gizmos and runtime UI widgets are both invisible to it**. Point
+it at a Creative device and you will often capture empty ground: a
+`Device_Billboard_V2_C`, for instance, has only an
+`EditorOnlyStaticMeshComponent` (the icon you see in the viewport) and a
+`Billboard_WidgetComp` (populated at runtime) — neither appears. That is not a
+placement bug; check the actor's location and bounds instead, and accept that
+its *appearance* needs a real session. The same applies to trigger volumes,
+spawn pads and most non-prop devices.
+
 ## Verify it left no trace
 
 The capture actor is destroyed and the render target is transient, so actor
