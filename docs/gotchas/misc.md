@@ -80,6 +80,33 @@ problem (their changes did survive), so this isn't a blanket rule for
 every setter method — but it's now a specific, confirmed exception to add
 to the "always suspect setter methods across a save" list.
 
+## A Creative device is a Blueprint, not the native class it wraps — and not every device lives in `/CreativeCoreDevices`
+
+Placing `/Script/FortniteGame.FortPlayerStartCreative` gives you an actor that
+*looks* like a Player Spawn Pad and reads back sensible properties, but Island
+Settings' `SpawnLocation = SPAWN_PADS` never sees it, because that setting
+enumerates the **device Blueprint**, not the base class. The real device is
+`/CRD_PlayerSpawn/BP_Creative_Player_Spawner_Prop.BP_Creative_Player_Spawner_Prop_C`
+— and it **spawns a `FortPlayerStartCreative` child actor of its own**, which
+is the giveaway: the native actor is a *component* of the device.
+
+Cost in SkyWars: 13 sessions with no working spawn points, players dropped
+above the world origin every match, and two wrong fixes aimed at Island
+Settings before the class itself was suspected.
+
+Two habits that shorten this:
+
+- **Diff a suspicious actor against its class CDO**
+  (`unreal.get_default_object(cls)`) before theorising about its properties.
+  In this case `ApplicableTeam = 1` and `PriorityGroup = 2147483647` looked
+  like smoking guns and were simply the class defaults — that comparison
+  redirected the search to the class itself.
+- **Search the whole asset registry, not one device folder.** `reg.get_all_assets()`
+  filtered by a name regex found `/CRD_PlayerSpawn/` immediately; every earlier
+  search had looked only under `/CreativeCoreDevices`, which holds many devices
+  but not all — several ship in their own `/CRD_*` roots, with a matching
+  `PID_Device_*` item definition and `_Verse` type alongside them.
+
 ## `is_object_valid` returns a tuple, not a `DataValidationResult`
 
 In UE 5.8 (Fortnite Release-41.30),
