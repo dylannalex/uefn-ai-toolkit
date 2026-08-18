@@ -7,5 +7,7 @@
     "name": "dylannalex",
     "url": "https://github.com/dylannalex"
   },
-  "mcpServers": "./.mcp.json"
+  "mcpServers": "./.mcp.json",
+  "hooks": "./hooks/hooks.json",
+  "skills": "./skills/"
 }
