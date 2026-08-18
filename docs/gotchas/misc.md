@@ -128,7 +128,60 @@ project has a real history of validation problems — as this one did. The
 two extra elements are `unreal.Array` objects of message tokens; treat a
 non-empty `r[2]` as authoritative for errors and `r[1]` as warnings.
 
-## Taking a real screenshot of the level from Python — works, but not reliably repeatable yet
+## `line_trace_multi` returns the hit array directly — and `None` when nothing is hit
+
+`unreal.SystemLibrary.line_trace_multi(...)` does **not** return the
+`(bool, out_hits)` tuple the Blueprint node's signature suggests. It returns
+the `HitResult` **array itself**, so the idiomatic `hits[1]` raises
+`IndexError: Array: Index 1 is out-of-bounds`. Worse, when the ray hits
+nothing it returns **`None`**, not an empty array, so a bare `for h in hits:`
+raises `TypeError: 'NoneType' object is not iterable`. Both forms crashed a
+prop-placement run in SkyWars session 14 — the second one only once sampling
+started reaching past an island's edge, i.e. well after the code looked
+correct. Always:
+
+```python
+hits = unreal.SystemLibrary.line_trace_multi(
+    world, start, end, unreal.TraceTypeQuery.ECC_VISIBILITY, True,
+    ignore_actors, unreal.DrawDebugTrace.NONE, True)
+for h in (hits or []):
+    t = h.to_tuple()          # 4 = impact location, 9 = hit actor, 10 = component
+```
+
+(`TraceTypeQuery.TRACE_TYPE_QUERY1` still works but is deprecated in 5.8 in
+favour of `ECC_VISIBILITY`.)
+
+## A "multi" trace still stops at the first blocking hit — ignore everything but the terrain
+
+`line_trace_multi` returns every hit *up to and including* the first blocking
+one; it does not see through solid geometry. So a downward ray meant to sample
+**ground height** lands on whatever prop happens to be in the way and never
+reaches the terrain. The symptom is misleading rather than loud: a radial sweep
+reports ground "missing" over a large fraction of an island that is in fact
+completely solid — in SkyWars session 14, 40% of sample points, purely because
+foliage was in the way.
+
+The fix is to pass everything that is *not* terrain in the ignore list, then
+pick the topmost remaining hit:
+
+```python
+ignore = [a for a in eas.get_all_level_actors()
+          if not a.get_actor_label().startswith("Central_Body")]   # terrain prefix
+```
+
+This is the same warning as "pass the props array in the trace ignore list when
+seating anything", but it bites a step earlier — it applies to *finding* the
+ground, not just to sitting an actor on it.
+
+## Taking a real screenshot of the level from Python — SUPERSEDED
+
+**Read [`../how-to-screenshot-the-level.md`](../how-to-screenshot-the-level.md)
+instead.** `SceneCapture2D` works reliably and synchronously; the section below
+describes two APIs (`take_high_res_screenshot` and the `HighResShot` console
+command) that were later confirmed to be dead ends, after four sessions were
+lost to them. It is kept only so nobody re-tries them.
+
+### Original note (do not act on this)
 
 There **is** a way to capture an actual image of the editor viewport from
 `execute_python`, not just read scene data — useful for visually
