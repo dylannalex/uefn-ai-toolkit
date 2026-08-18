@@ -12,7 +12,7 @@ flowchart TD
     B --> C{"Restart UEFN"}
     C --> D["UEFN listens for\nremote execution"]
 
-    E["uefn-mcp repo cloned"] --> F["claude mcp add uefn\nregisters the server command"]
+    E["plugin installed"] --> F["plugin .mcp.json\ndeclares the server command"]
     F --> G{"Restart Claude Code session"}
     G --> H["uefn tools available\nin chat"]
 
@@ -54,7 +54,7 @@ Because both files are only read at editor startup: **if UEFN was already open w
 
 ## Side 2 — registering `uefn-mcp` with Claude Code
 
-`claude mcp add uefn --scope user -- uv --directory "<repo path>" run uefn-mcp` tells Claude Code *how to start* the `uefn-mcp` process — the exact command, `uv --directory <repo path> run uefn-mcp`. Because `--directory` is baked into that command, the server always runs against this repo checkout regardless of the working directory the command happens to be typed in.
+The plugin's `.mcp.json` tells Claude Code *how to start* the `uefn-mcp` process: `uv --directory ${CLAUDE_PLUGIN_ROOT} run uefn-mcp`. `${CLAUDE_PLUGIN_ROOT}` resolves to the plugin's own directory under `~/.claude/plugins/cache/`, so the server always runs against the installed copy no matter which folder the session is working in.
 
 What *does* matter is **scope** — where that registration itself gets stored, which controls when Claude Code even considers starting the server:
 
@@ -64,7 +64,7 @@ What *does* matter is **scope** — where that registration itself gets stored, 
 | `user` (`-s user`) | `~/.claude.json`, top-level, not tied to a project | you start Claude Code from anywhere |
 | `project` (`-s project`) | `.mcp.json` checked into the repo | anyone with the repo, from that folder |
 
-The README's setup step uses `-s user` deliberately, not just `local` (the default): a session started from a different folder — e.g. a `fortnite-maps` notes workspace created by the `fortnite-map-setup` skill — still needs to reach the `uefn` tools, and `local` scope wouldn't be visible there.
+Install the plugin at **user** scope, not project scope. A session working in a map's own notes repository still has to reach the `uefn` tools, and a project-scoped install would only be visible inside this repository — which is not where map building happens.
 
 MCP servers are only started when a Claude Code **session starts** — adding or changing a registration never affects a session already in progress. That's the second restart: not UEFN this time, but Claude Code itself.
 

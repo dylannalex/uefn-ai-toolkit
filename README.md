@@ -1,71 +1,82 @@
 # uefn-mcp
 
-Lets Claude build Fortnite maps for you inside UEFN (Unreal Editor for
-Fortnite) — placing props, moving things around, browsing your content —
-instead of you clicking through the editor UI by hand.
+Build Fortnite maps by describing them to Claude, instead of clicking through
+the UEFN editor by hand.
 
-## What you need first
+It is a Claude Code plugin with three parts: an MCP server that drives a
+running UEFN editor over Epic's Python remote execution protocol, a set of
+skills, and a knowledge base of what actually works in Fortnite Creative —
+which assets are publish-safe, which device settings are scriptable, and
+which routes are dead ends that look promising.
+
+## What you need
 
 - UEFN installed, with a project created.
 - [Claude Code](https://claude.ai/code).
+- [`uv`](https://docs.astral.sh/uv/) on your PATH (the server is Python).
 
-That's it — Claude can install everything else itself.
+## Install
 
-## Setup
+```
+/plugin marketplace add dylannalex/uefn-mcp
+/plugin install uefn-mcp@dylannalex-uefn
+```
 
-Open a terminal in this folder, start Claude Code, and paste this:
-
-> Install and register the uefn-mcp server with Claude Code: check whether
-> `uv` is installed and install it if it's missing, run `uv sync` in this
-> folder, then run
-> `claude mcp add uefn --scope user -- uv --directory "$(pwd)" run uefn-mcp`.
-
-`--scope user` registers the server globally instead of tying it to this one
-folder, so it's also available from other working directories — e.g. a
-`fortnite-maps` notes workspace set up via the `fortnite-map-setup` skill
-(see [docs/INDEX.md](docs/INDEX.md)).
-
-Once that's done, **start a new Claude Code session** in this folder (MCP
-servers only connect when a session starts). Then open UEFN with your
-project loaded and paste this:
+Then **start a new Claude Code session** — MCP servers only connect at
+session start. Open UEFN with your project loaded and ask:
 
 > Set up my UEFN project for remote execution.
 
-Claude will find your project on disk and turn on the two settings UEFN
-needs — Python Scripting itself (Project Settings > Python) and remote
-execution for it — both off by default. If UEFN was already open, Claude
-will tell you to restart it — these settings only take effect on startup.
+Claude finds the project on disk and turns on the two settings UEFN needs —
+Python Scripting, and remote execution for it — both off by default. If UEFN
+was already open you will be told to restart it; those settings are only read
+at startup.
 
-Once UEFN is back up with your project loaded, you're ready to build.
+## Use it
 
-## What to ask Claude to do
-
-Once it's set up, just describe what you want in your own words. For example:
+Describe what you want:
 
 > Show me everything currently placed in my level
 
-> Spawn a chest at the center of the map
+> Spawn a chest at the centre of the map and put an assault rifle in it
 
-> Move the actor called "SpawnPoint_1" up by 200 units
+> Move "SpawnPoint_1" up by 200 units
 
-> Duplicate "Tree_03" and offset the copy to the side
+> Take a screenshot of the map from above so you can see it
 
-> What props/devices are available in my content browser?
+> Check whether anything in my level will fail to publish
 
-> Save the level
+You don't need to know Unreal or Python. If Claude doesn't know a device or
+prop's name, it can search your content browser for it.
 
-If Claude gets stuck because it doesn't know the exact name of a Fortnite
-device or prop, it can look through your content browser itself to find it
-— you don't need to know Unreal or Python to use any of this.
+## Keeping notes between sessions
 
-## Limitations
+Claude has no memory of the editor between conversations, and a `.uefnproject`
+is binary — it can't be diffed or reviewed. Ask for a map project and the
+plugin scaffolds a plain git repository of markdown alongside your map: the
+design, what is currently built, what is still pending, and a build log.
 
-- Only one UEFN instance can be connected at a time — if you have more than
-  one open, Claude connects to whichever one it finds first.
-- Claude finds things you've placed by their name in the World Outliner, so
-  giving actors clear, unique names helps it find the right one.
+> Set up a project folder for my new map
+
+That repository is yours and holds no plugin files, so updating the plugin
+never touches your notes.
+
+## Limits worth knowing
+
+- **One editor at a time.** Discovery connects to whichever UEFN instance it
+  finds first, so keep one open. Several Claude Code sessions can now run
+  against it — each gets its own command port.
+- **Compiling Verse is a manual click.** There is no scriptable trigger for
+  `Verse > Build Verse Code`; everything downstream of a compile is automated,
+  the compile itself isn't.
+- **Item content is only scriptable on Item Spawner V3.** Item Granter and
+  Class Designer hold theirs behind a platform wall. This is documented rather
+  than worked around, so nobody spends a session rediscovering it.
+- Claude finds placed things by their World Outliner name, so clear, unique
+  labels help.
 
 ## How it works
 
-See [docs/INDEX.md](docs/INDEX.md) for a deeper look at the architecture, the wire
-protocol this talks to UEFN, and a traced example of a tool call end to end.
+See `skills/uefn-knowledge/SKILL.md` for the knowledge base's routing table,
+and [docs/internals/INDEX.md](docs/internals/INDEX.md) for the architecture,
+the wire protocol, and a tool call traced end to end.

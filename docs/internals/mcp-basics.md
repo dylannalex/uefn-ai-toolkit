@@ -12,7 +12,7 @@ No. There's no server to launch, no terminal to leave open, no background servic
 
 ## So how does it get started?
 
-`claude mcp add uefn --scope user -- uv --directory "<repo path>" run uefn-mcp` (the setup step from the README) doesn't start anything by itself — it just writes a launch command into Claude Code's config (`~/.claude.json`, see [setup.md](setup.md) for the scope details).
+Installing the plugin doesn't start anything by itself — the plugin's `.mcp.json` just declares a launch command, `uv --directory ${CLAUDE_PLUGIN_ROOT} run uefn-mcp`, for Claude Code to run at session start (see [setup.md](setup.md)).
 
 The actual start happens **when a new Claude Code session begins**: Claude Code reads that config, and for every registered MCP server it's allowed to use, it spawns the server's command as a child process — `uv --directory <repo path> run uefn-mcp` in this case — and keeps a pipe open to it for the lifetime of the session. Close the session (or restart Claude Code), and that child process is torn down with it. This is also exactly why registering or re-registering a server never affects a session already in progress — the spawning only happens at session start.
 
@@ -56,7 +56,7 @@ No — and this is the part worth keeping straight, because there are really **t
 |---|---|---|
 | Protocol | MCP (JSON-RPC over stdio) | Epic's remote execution protocol (UDP + TCP) |
 | Starts | when the Claude Code session starts | lazily, on the first tool call that touches the editor |
-| Requires | server registered (`claude mcp add`) | UEFN open, project loaded, remote execution enabled (see [setup.md](setup.md)) |
+| Requires | plugin installed | UEFN open, project loaded, remote execution enabled (see [setup.md](setup.md)) |
 | If it's down | tool calls aren't available to Claude at all | tool calls fail with a connection error, but the MCP session itself is fine |
 
 So it's possible (and normal) for `uefn-mcp` to be running and connected to Claude Code while UEFN is closed — you'll just get a connection error the moment a tool tries to reach the editor, e.g. from `get_editor_status`, rather than at session start.

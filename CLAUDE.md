@@ -2,76 +2,109 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Read [docs/INDEX.md](docs/INDEX.md) before consulting anything else under `docs/`** — it routes to the right doc by task ("how do I add item content to a device", "is this setting scriptable", "how do I add a new tool", etc.) instead of requiring you to know which file has the answer.
+**Route through the `uefn-knowledge` skill (`skills/uefn-knowledge/SKILL.md`) before opening anything under `docs/`** — it maps a task to the one file that answers it, so you don't need to know which file has the answer. Every directory under `docs/` also has a generated `INDEX.md`.
 
 ## What this is
 
-An MCP server that drives a running UEFN (Unreal Editor for Fortnite) instance
-via Python, so an MCP client can inspect/build Fortnite maps without manual
-editor UI clicks. It talks to UEFN's built-in Python Editor Script Plugin
-remote execution protocol (UDP discovery + TCP command channel) — no plugin
-code runs inside UEFN beyond what ships with the engine.
+A Claude Code **plugin** that lets a session build Fortnite maps inside UEFN
+(Unreal Editor for Fortnite). It bundles three things that are useless apart:
+
+- an **MCP server** (`src/uefn_mcp/`) that drives a running editor via Epic's
+  Python Editor Script Plugin remote execution protocol (UDP discovery + TCP
+  command channel) — no plugin code runs inside UEFN beyond what ships with
+  the engine;
+- **skills** (`skills/`) — `uefn-knowledge` (the routing table into `docs/`)
+  and `new-map-project` (scaffolds a map's notes folder);
+- a **knowledge base** (`docs/`) of validated asset paths, device class paths
+  and `unreal.*` gotchas, all established against a live editor.
+
+A map's own notes live in a separate **content workspace** — a plain git
+repository the user owns, one folder per map. Nothing from this repository is
+ever copied into it: the plugin installs once at user scope and is reachable
+from any working directory. That matters historically, because the previous
+design *did* copy its skills into each workspace, and every copy became a
+fork that could not receive an update.
+
+## Layout
+
+```
+.claude-plugin/plugin.json       manifest: skills, hooks, mcpServers
+.claude-plugin/marketplace.json  this repo is also its own marketplace
+.mcp.json                        registers the server via ${CLAUDE_PLUGIN_ROOT}
+hooks/hooks.json                 regenerates a content workspace's INDEX.md files
+scripts/reindex.py               generates every INDEX.md from frontmatter
+skills/                          uefn-knowledge, new-map-project
+src/uefn_mcp/                    the MCP server (three layers, below)
+docs/                            assets/ how-to/ gotchas/ internals/
+tests/test_bridge.py             self-check, runs without an editor
+```
 
 ## Commands
 
 ```powershell
-uv sync                  # install deps
-uv run uefn-mcp           # run the server standalone (for manual testing)
-claude mcp add uefn --scope user -- uv --directory "<path to this repo>" run uefn-mcp
+uv sync                     # install deps
+uv run uefn-mcp             # run the server standalone (manual testing)
+python tests/test_bridge.py # self-check that needs no editor
+python scripts/reindex.py docs
 ```
 
-There are no tests, lint, or type-check configs in this repo currently.
-
-To exercise the server end-to-end, UEFN must be open with a project loaded
-and Python remote execution enabled (see "UEFN prerequisite" below).
+Installed by users as a plugin (`/plugin marketplace add dylannalex/uefn-mcp`,
+then `/plugin install uefn-mcp@dylannalex-uefn`). There is no lint or
+type-check config. To exercise the server end to end, UEFN must be open with
+a project loaded and Python remote execution enabled (below).
 
 ## Architecture
 
-Three layers, each in `src/uefn_mcp/`:
+Three layers in `src/uefn_mcp/`, each depending only on the one below:
 
 - **`remote_execution.py`** — vendored, unmodified copy of Epic's
-  `PythonScriptRemoteExecution` client (see the "Copyright Epic Games" header).
-  Implements the wire protocol: UDP multicast ping/pong for discovering editor
-  nodes, then a TCP command connection for sending Python and receiving
-  results. Treat this as third-party code — don't add project-specific logic
-  here.
-- **`bridge.py`** — `UEFNBridge`, a thread-safe wrapper around one
-  `RemoteExecution` command connection (module singleton via `get_bridge()`).
-  Auto-connects on first use, reconnects once on a stale/closed connection.
-  Two entry points tool implementations use:
-  - `exec_raw(code, exec_mode)` — runs code, returns the raw protocol result
-    dict (`success`, `result`, `output`).
+  `PythonScriptRemoteExecution` client (see its `Copyright Epic Games`
+  header). Treat as third-party: no project-specific logic goes here, so it
+  stays a drop-in match for whatever ships with the engine.
+- **`bridge.py`** — `UEFNBridge`, a thread-safe wrapper around one command
+  connection (module singleton via `get_bridge()`). Connects lazily,
+  reconnects once on a stale connection. Two entry points:
+  - `exec_raw(code, exec_mode)` — raw protocol result dict.
   - `exec_json(code, **params)` — the primary interface. Wraps `code` so
-    `params` are JSON round-tripped into an in-editor `_params` dict, requires
-    `code` to assign its answer to a variable named `result`, and extracts
-    that value by scanning stdout for `@@UEFN_MCP_RESULT_START@@...@@UEFN_MCP_RESULT_END@@`
-    markers (the editor's own print output can't be trusted otherwise).
+    `params` arrive as an in-editor `_params` dict, requires `code` to assign
+    its answer to `result`, and extracts it from stdout between
+    `@@UEFN_MCP_RESULT_START@@` / `@@UEFN_MCP_RESULT_END@@` markers (the
+    editor's own log output can't otherwise be told apart from the answer).
     Raises `UEFNScriptError` if the markers are missing or the script failed.
-- **`server.py`** — `MCPServer("uefn-mcp")` and the `@mcp.tool()` definitions.
-  Every tool (except `execute_python`) builds a Python source string that
-  calls into `unreal.*` editor APIs and calls `get_bridge().exec_json(...)`.
-  Shared snippets like actor-lookup-by-label (`_ACTOR_LOOKUP`) and
-  transform-serialization (`_transform_dict`) are factored out as string
-  builders and concatenated into the full script per tool.
 
-When adding a new tool: write the `unreal` Python as a string that ends by
-assigning a JSON-serializable value to `result`, pass any tool arguments
-through as `exec_json(..., key=value)` kwargs (they arrive as `_params` inside
-the editor-side script), and keep the tool's Python docstring precise — it's
-what the MCP client sees to decide when/how to call the tool.
+  Each bridge reserves **its own command port**. Epic's client defaults every
+  process to 6776 with `SO_REUSEADDR`, so two Claude Code sessions used to
+  fight over one port until both died. Don't reintroduce a shared default.
+- **`server.py`** — `MCPServer("uefn-mcp")` and the `@mcp.tool()` definitions.
+  Every tool except `execute_python` builds a Python source string calling
+  into `unreal.*` and hands it to `get_bridge().exec_json(...)`. Shared
+  snippets (`_ACTOR_LOOKUP`, `_transform_dict`, `_VERSE_CLASS`) are string
+  builders concatenated per tool.
+
+When adding a tool: write the `unreal` Python as a string ending in an
+assignment to `result`, pass arguments through as `exec_json(..., key=value)`
+kwargs, and keep the docstring precise — it is what the client sees when
+deciding whether to call it.
+
+**A tool is the right home for a procedure with one correct form.** Several
+tools exist only because prose kept being followed wrongly: `set_actor_transform`
+does `modify()` + teleport + nudge-and-return + save because a bare
+`set_actor_location` silently loses work, and `validate_level` saves first
+because `is_object_valid` lies before a save. If a doc says "always remember
+to X", that is a signal X belongs in the tool.
 
 ## UEFN prerequisite
 
-Unlike stock Unreal Editor, UEFN ships with **two** independent Python
-switches off by default, and both have to be on or discovery just silently
-never hears a `pong` — there's no error that distinguishes "plugin inactive"
-from "plugin active but not listening."
+Unlike stock Unreal Editor, UEFN ships **two** independent Python switches off
+by default, and both must be on or discovery just never hears a `pong` —
+there is no error distinguishing "plugin inactive" from "plugin active but
+not listening."
 
-1. **Python Scripting itself** (Project Settings > Python in the UEFN UI) —
+1. **Python Scripting** (Project Settings > Python) —
    `bEnablePythonForProject` under `dataSets.experimental.pythonExperimental`
-   in the `.uefnproject` JSON file.
-2. **Remote execution** for that plugin — a `Config/DefaultEngine.ini` in the
-   target UEFN project (next to the `.uefnproject` file) with:
+   in the `.uefnproject` JSON.
+2. **Remote execution** — a `Config/DefaultEngine.ini` next to the
+   `.uefnproject` file with:
 
 ```ini
 [/Script/PythonScriptPlugin.PythonScriptPluginSettings]
@@ -81,27 +114,21 @@ RemoteExecutionMulticastBindAddress=127.0.0.1
 RemoteExecutionMulticastTtl=0
 ```
 
-`setup_uefn_project` sets both. Both are only read at editor startup, so
-UEFN must be restarted after creating/editing either file — including when
-Python Scripting was turned on by hand in the UEFN UI while the editor was
-already running. Only one editor instance can be connected to at a time —
-discovery picks the first node it finds.
+`setup_uefn_project` sets both. Both are read only at editor startup, so UEFN
+must be restarted afterwards — including when Python Scripting was turned on
+by hand while the editor was running. Only one editor can be connected at a
+time; discovery picks the first node it finds.
 
 ## Working with `unreal.*` APIs
 
-There's no local `unreal` module to introspect or type-check against — it
-only exists inside the running editor process. Use the `execute_python` tool
-against a live UEFN instance to explore `unreal.EditorAssetLibrary`,
-`unreal.EditorActorSubsystem`, etc., and to discover Fortnite
-device/Blueprint class paths (they aren't hardcoded anywhere in this repo)
-before wiring a new dedicated tool around them.
+There is no local `unreal` module to introspect against — it exists only
+inside the running editor. Use `execute_python` against a live UEFN instance
+to explore, and to discover Fortnite device/Blueprint class paths (none are
+hardcoded here) before wiring a dedicated tool around them.
 
-Before concluding some Fortnite Creative device setting can only be changed
-by hand in the Details panel, read
-[docs/gotchas/user-options.md](docs/gotchas/user-options.md) — most
-"V2" device settings that look read-only from Python (the "User Options"
-system) are actually writable via `set_editor_property` using the option's
-exact key name, not the runtime-only `set_user_option_value`. The rest of
-`docs/gotchas/` tracks other non-obvious `unreal.*` behavior worth knowing
-before wiring a new tool around it (see [docs/INDEX.md](docs/INDEX.md) for
-the full list); add to it whenever a session turns up another gotcha.
+Before concluding something can only be done by hand in the Details panel,
+check the `uefn-knowledge` skill. Most "V2" device settings that look
+read-only are writable via `set_editor_property` with the option's exact key
+name; a raw asset that fails validation usually has a Blueprint wrapper that
+passes. Add to `docs/` whenever a session turns up another finding — with a
+`description:` in the frontmatter, or it will index as `—`.
