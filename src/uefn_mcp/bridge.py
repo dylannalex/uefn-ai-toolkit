@@ -10,6 +10,7 @@ and Python enabled for that project.
 from __future__ import annotations
 
 import json
+import socket
 import threading
 import time
 from typing import Any
@@ -28,6 +29,22 @@ class UEFNScriptError(RuntimeError):
     pass
 
 
+def _free_port() -> int:
+    """Reserve a currently-free localhost TCP port for this process's use.
+
+    Epic's client defaults every process to the same command port (6776) and
+    sets SO_REUSEADDR, which on Windows lets a second process take over a port
+    the first is already listening on. Two Claude Code sessions therefore both
+    announce 6776 to the editor, the editor's callback lands on whichever
+    process the OS picks, and the loser reconnects and steals it back - the
+    connection ping-pongs until both die. Giving each process its own port
+    removes the contention instead of arbitrating it.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
 class UEFNBridge:
     """Thread-safe wrapper around a single remote execution command connection."""
 
@@ -40,7 +57,9 @@ class UEFNBridge:
         """(Re)establish a command connection to the first discovered editor node."""
         with self._lock:
             self._teardown()
-            self._remote_exec = re.RemoteExecution()
+            config = re.RemoteExecutionConfig()
+            config.command_endpoint = ("127.0.0.1", _free_port())
+            self._remote_exec = re.RemoteExecution(config)
             self._remote_exec.start()
             deadline = time.time() + self._discovery_timeout
             node = None
@@ -58,7 +77,21 @@ class UEFNBridge:
                     "and that Python is enabled for that project "
                     "(Edit > Project Settings > Python)."
                 )
-            self._remote_exec.open_command_connection(node["node_id"])
+            try:
+                self._remote_exec.open_command_connection(node["node_id"])
+            except RuntimeError as exc:
+                self._teardown()
+                raise UEFNConnectionError(
+                    f"Found the editor ({node.get('project_name') or node['node_id']}) "
+                    f"but it never connected back: {exc}\n"
+                    "The editor accepted the discovery ping and then failed to open "
+                    "the command channel. Usual causes, in order: the editor is busy "
+                    "or mid-dialog and cannot service the request; Python remote "
+                    "execution was enabled in the .uefnproject or DefaultEngine.ini "
+                    "but UEFN has not been restarted since; or a firewall is blocking "
+                    "the loopback callback. Do not kill the editor - retrying once it "
+                    "is idle is usually enough."
+                ) from exc
             return node
 
     def disconnect(self) -> None:
@@ -90,12 +123,27 @@ class UEFNBridge:
                 return self._remote_exec.run_command(
                     code, unattended=unattended, exec_mode=exec_mode
                 )
-            except (OSError, RuntimeError):
-                # Stale/closed connection (e.g. editor was restarted) - reconnect once.
+            except (OSError, RuntimeError) as first:
+                # The connection went stale (e.g. the editor was restarted).
+                # has_command_connection() only checks the object exists, never
+                # that the socket is alive, so this is where staleness surfaces.
                 self.connect()
-                return self._remote_exec.run_command(
-                    code, unattended=unattended, exec_mode=exec_mode
-                )
+                try:
+                    return self._remote_exec.run_command(
+                        code, unattended=unattended, exec_mode=exec_mode
+                    )
+                except (OSError, RuntimeError) as second:
+                    self._teardown()
+                    raise UEFNConnectionError(
+                        f"Lost the connection to UEFN and could not re-establish it.\n"
+                        f"  first attempt:  {first}\n"
+                        f"  after reconnect: {second}\n"
+                        "The editor is discoverable but not executing commands. Check "
+                        "that UEFN is still open with the project loaded and is not "
+                        "blocked on a modal dialog. Killing the uefn-mcp process does "
+                        "not help - each session gets its own command port, so a "
+                        "second session is not the cause."
+                    ) from second
 
     def exec_json(self, code: str, **params: Any) -> Any:
         """Run `code` in the editor and return a JSON-decoded result.
