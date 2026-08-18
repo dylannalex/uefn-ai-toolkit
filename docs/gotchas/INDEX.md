@@ -9,3 +9,5 @@
 | [misc.md](misc.md) | Smaller one-off findings: line_trace_multi's return shape, basic-shape mesh spawning, stale uefn-mcp processes, is_object_valid's tuple return. |
 | [transform-persistence.md](transform-persistence.md) | Moving a placed actor silently fails to save without actor.modify(), and leaves its collision body behind — read before any bulk transform work. |
 | [user-options.md](user-options.md) | Fortnite Creative "User Options" are settable via set_editor_property with the exact key name, not the runtime-only set_user_option_value. |
+| [validation.md](validation.md) | Why a level passes validation and still fails to publish — is_object_valid before a save, raw assets vs Blueprint wrappers, and the content root that is exempt from the allowlist. |
+| [verse-language.md](verse-language.md) | Verse behaviours that compile fine and are wrong at runtime — PlayerAddedEvent missing everyone already present, block archetypes as call arguments, and what persistence can and can't do. |

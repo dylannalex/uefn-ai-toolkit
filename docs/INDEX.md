@@ -4,6 +4,7 @@
 
 | File | Description |
 | --- | --- |
+| [assets/](assets/INDEX.md) | *(directory)* |
 | [gotchas/](gotchas/INDEX.md) | *(directory)* |
 | [how-to/](how-to/INDEX.md) | *(directory)* |
 | [internals/](internals/INDEX.md) | *(directory)* |

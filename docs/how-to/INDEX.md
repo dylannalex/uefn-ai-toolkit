@@ -4,6 +4,7 @@
 
 | File | Description |
 | --- | --- |
+| [compose-an-island-from-cliff-slabs.md](compose-an-island-from-cliff-slabs.md) | Build a round platform out of rotated cliff slabs by measuring the radial profile, and verify the result with traces rather than bounds. |
 | [screenshot-the-level.md](screenshot-the-level.md) | Render the level to a PNG from Python via SceneCapture2D, so Claude can look at the map itself. |
 | [set-item-spawner-content.md](set-item-spawner-content.md) | The current, working method for scripting Item Spawner V3 content. |
 | [spawn-and-wire-custom-verse-devices.md](spawn-and-wire-custom-verse-devices.md) | Spawning a project's own compiled Verse creative_device, reading/writing its @editable fields, and the Verse-tag workaround for the native-device binding wall. |
