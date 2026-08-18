@@ -1,0 +1,14 @@
+{
+  "name": "dylannalex-uefn",
+  "owner": {
+    "name": "dylannalex",
+    "url": "https://github.com/dylannalex"
+  },
+  "plugins": [
+    {
+      "name": "uefn-mcp",
+      "source": "./",
+      "description": "Build Fortnite maps in UEFN from Claude Code, with a knowledge base of validated assets and editor-scripting gotchas."
+    }
+  ]
+}
