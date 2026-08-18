@@ -1,3 +1,7 @@
+---
+description: The three layers of the codebase (server, bridge, vendored Epic client) and how they stack.
+---
+
 # Architecture
 
 `uefn-mcp` is split into three layers, each in `src/uefn_mcp/`, and each with

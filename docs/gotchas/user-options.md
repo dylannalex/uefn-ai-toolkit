@@ -1,3 +1,7 @@
+---
+description: Fortnite Creative "User Options" are settable via set_editor_property with the exact key name, not the runtime-only set_user_option_value.
+---
+
 # "User Options" ARE settable at edit time — via `set_editor_property`
 
 Fortnite Creative's "V2" device family (Island Settings, Round Settings,
@@ -47,6 +51,6 @@ pattern for the whole "V2" device family, not a one-off.
 
 Picking *which item* an Item Granter grants or an Item Spawner spawns is a
 different, much narrower problem — see
-[item-content/index.md](item-content/index.md) for the full investigation.
+[item-content/overview.md](item-content/overview.md) for the full investigation.
 The short version: it's not a plain User Option, and the same is true of
 device-to-device event wiring — see [event-wiring.md](event-wiring.md).

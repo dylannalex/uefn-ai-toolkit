@@ -1,3 +1,7 @@
+---
+description: One tool call (spawn_actor) traced end to end, from MCP request to editor and back.
+---
+
 # A tool call, end to end
 
 Tracing one concrete call — `spawn_actor` — from a chat message down to an

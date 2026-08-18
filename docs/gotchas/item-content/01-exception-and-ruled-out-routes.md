@@ -1,6 +1,10 @@
+---
+description: First pass: the item-content exception, and the routes ruled out for setting it from Python.
+---
+
 # Pass 0 — the exception, and five ruled-out routes
 
-Part of the [item-content investigation](index.md). This file covers the
+Part of the [item-content investigation](overview.md). This file covers the
 initial finding and the first round of dead ends.
 
 ## Actual item/weapon content is Details-panel-only (as first found)
@@ -28,7 +32,7 @@ property names, and inspecting every struct-valued property found via
 Conclusion at this point: populating actual loot (weapons, consumables,
 resources) into an Item Granter or Item Spawner instance requires a human
 in the Details panel. (Later passes below revise this for Item Spawner V3
-specifically — see [index.md](index.md) for the current status.)
+specifically — see [index.md](overview.md) for the current status.)
 
 ## Confirmed routes that do NOT solve this (as of 2026-08-09)
 

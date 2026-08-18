@@ -1,3 +1,7 @@
+---
+description: Moving a placed actor silently fails to save without actor.modify(), and leaves its collision body behind — read before any bulk transform work.
+---
+
 # Moving a placed actor: two traps that report success while doing nothing
 
 Both were hit in one session (SkyWars, session 12), cost an entire map

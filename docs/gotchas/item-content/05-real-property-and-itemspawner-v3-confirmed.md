@@ -1,9 +1,13 @@
+---
+description: The confirmed working route: Item Spawner V3's ToSpawnList is a real, writable property.
+---
+
 # The real backing property, a new enumeration technique, and the confirmed fix
 
-Part of the [item-content investigation](index.md). Continues from
+Part of the [item-content investigation](overview.md). Continues from
 [pass 4](04-live-session-and-fortpickupcreative.md). This is where the
 investigation actually resolves for Item Spawner V3 — see
-[../../how-to-set-item-spawner-content.md](../../how-to-set-item-spawner-content.md)
+[../../how-to/set-item-spawner-content.md](../../how-to/set-item-spawner-content.md)
 for the how-to once you've read this.
 
 ## Found the real backing property — readable, but instance-writes are explicitly blocked
@@ -78,7 +82,7 @@ repeat of the `FortPickupCreative` false positive from
 [pass 4](04-live-session-and-fortpickupcreative.md). See
 [pass 6](06-pending-verification-historical-trail.md) for the full
 discovery narrative (kept for the trail) and
-[../../how-to-set-item-spawner-content.md](../../how-to-set-item-spawner-content.md)
+[../../how-to/set-item-spawner-content.md](../../how-to/set-item-spawner-content.md)
 for the practical how-to reference (code sample, field reference, scope
 caveats — use that doc when actually doing this).
 

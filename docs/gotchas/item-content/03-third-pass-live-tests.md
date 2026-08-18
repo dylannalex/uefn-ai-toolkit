@@ -1,6 +1,10 @@
+---
+description: Third pass: live tests against a running editor (SkyWars session 7).
+---
+
 # Pass 3 — live-editor tests of the remaining leads, plus a new (non-viable) lead
 
-Part of the [item-content investigation](index.md) (SkyWars session 7).
+Part of the [item-content investigation](overview.md) (SkyWars session 7).
 Continues from [pass 2](02-second-pass-corroboration.md).
 
 Live UEFN editor was connected for this pass, so both items angle 5 flagged

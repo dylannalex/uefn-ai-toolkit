@@ -1,6 +1,10 @@
+---
+description: The wire protocol uefn-mcp speaks to UEFN (Epic's, not invented here): UDP discovery, then a TCP command channel.
+---
+
 # The remote execution protocol
 
-This is Epic's protocol, implemented (not designed) by [`remote_execution.py`](../src/uefn_mcp/remote_execution.py). It's the same protocol behind Unreal's "Remote Execution" Python console feature — UEFN just ships it turned off by default (see [setup.md](setup.md)).
+This is Epic's protocol, implemented (not designed) by [`remote_execution.py`](../../src/uefn_mcp/remote_execution.py). It's the same protocol behind Unreal's "Remote Execution" Python console feature — UEFN just ships it turned off by default (see [setup.md](setup.md)).
 
 Two channels are involved, for two different jobs:
 

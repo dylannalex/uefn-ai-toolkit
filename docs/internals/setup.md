@@ -1,3 +1,7 @@
+---
+description: What setup_uefn_project and plugin installation change on disk, and why both need a restart.
+---
+
 # Setup, and what it actually changes
 
 Two independent things have to be true before any tool call in `server.py` can reach a running editor. Neither is automatic, and both require a restart of *something* to take effect — which is why setup feels like more steps than it should.

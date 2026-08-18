@@ -1,6 +1,10 @@
+---
+description: The current, working method for scripting Item Spawner V3 content.
+---
+
 # How to set Item Spawner content via script
 
-**Status: confirmed working, survives a real UEFN editor restart** (verified 2026-08-09 against `SkyWars` — see [gotchas/item-content/index.md](gotchas/item-content/index.md) for the full trail; this doc is just the "how to use it" reference).
+**Status: confirmed working, survives a real UEFN editor restart** (verified 2026-08-09 against `SkyWars` — see [../gotchas/item-content/overview.md](../gotchas/item-content/overview.md) for the full trail; this doc is just the "how to use it" reference).
 
 ## Scope — read this first
 
@@ -9,7 +13,7 @@ Works for **`Device_ItemSpawner_V3_C`** (chests, "global spawn" item pads) and n
 | Device | Scriptable? |
 | --- | --- |
 | `Device_ItemSpawner_V3_C` (chests, global-spawn pads) | **Yes** — this doc |
-| `Device_ItemGranter_V2_C` | **No** — confirmed blocked, same error shape (`cannot be edited on instances`) on its equivalent component (`PickupItemListComponent_C.ItemList`). Still needs the live-session drop-to-register flow (see [gotchas/item-content/04-live-session-and-fortpickupcreative.md](gotchas/item-content/04-live-session-and-fortpickupcreative.md)). |
+| `Device_ItemGranter_V2_C` | **No** — confirmed blocked, same error shape (`cannot be edited on instances`) on its equivalent component (`PickupItemListComponent_C.ItemList`). Still needs the live-session drop-to-register flow (see [gotchas/item-content/04-live-session-and-fortpickupcreative.md](../gotchas/item-content/04-live-session-and-fortpickupcreative.md)). |
 | Anything else | Untested — check before assuming either way. |
 
 The working property is specific to Item Spawner V3's component makeup — Item Granter's structurally-similar component turned out blocked.
@@ -56,7 +60,7 @@ set_item_spawner_content(
 )
 ```
 
-For multiple items in one spawner (e.g. for the `Random Spawns` User Option — see [gotchas/user-options.md](gotchas/user-options.md)), pass a list of several entries instead of one.
+For multiple items in one spawner (e.g. for the `Random Spawns` User Option — see [gotchas/user-options.md](../gotchas/user-options.md)), pass a list of several entries instead of one.
 
 ## Finding item asset paths
 
@@ -99,8 +103,8 @@ This runs the *same* validators the editor's Message Log uses (including `FortVa
 
 - **Read back to confirm** — `comp.get_editor_property("ToSpawnList")` — and **save with the `save_level` MCP tool**, not a raw engine save call.
 - The pickup mesh on the chest/pad updates immediately in the viewport, a quick visual sanity check.
-- **Survives a real editor close/reopen** — confirmed empirically, unlike a similar-looking `FortPickupCreative` approach that looked identical at this stage but silently failed on reload — see [gotchas/item-content/04-live-session-and-fortpickupcreative.md](gotchas/item-content/04-live-session-and-fortpickupcreative.md).
+- **Survives a real editor close/reopen** — confirmed empirically, unlike a similar-looking `FortPickupCreative` approach that looked identical at this stage but silently failed on reload — see [gotchas/item-content/04-live-session-and-fortpickupcreative.md](../gotchas/item-content/04-live-session-and-fortpickupcreative.md).
 
 ## What this means for workarounds, and what's not done yet
 
-A manual "Details-panel item assignment sheet" (e.g. `personal/fortnite-maps/SkyWars/docs/manual-assignment-sheet.md`) can drop the manual pass **for its Item Spawner instances** and script the assignments directly; Item Granter entries in that sheet still need the live-session workaround. This could also become a dedicated `@mcp.tool()` (e.g. `set_item_spawner_content`) in `src/uefn_mcp/server.py` instead of hand-writing the snippet above every time — see [architecture.md](architecture.md) for how tools are structured, and [gotchas/item-content/index.md](gotchas/item-content/index.md) for the full "what's left" status. Not implemented as of this writing.
+A manual "Details-panel item assignment sheet" (e.g. `personal/fortnite-maps/SkyWars/docs/manual-assignment-sheet.md`) can drop the manual pass **for its Item Spawner instances** and script the assignments directly; Item Granter entries in that sheet still need the live-session workaround. This could also become a dedicated `@mcp.tool()` (e.g. `set_item_spawner_content`) in `src/uefn_mcp/server.py` instead of hand-writing the snippet above every time — see [../internals/architecture.md](../internals/architecture.md) for how tools are structured, and [../gotchas/item-content/overview.md](../gotchas/item-content/overview.md) for the full "what's left" status. Not implemented as of this writing.

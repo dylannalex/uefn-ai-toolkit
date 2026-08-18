@@ -1,6 +1,10 @@
+---
+description: The live-session workaround and the FortPickupCreative false positive that only failed after a restart.
+---
+
 # Correction, and a promising-looking dead end (`FortPickupCreative`)
 
-Part of the [item-content investigation](index.md). Continues from
+Part of the [item-content investigation](overview.md). Continues from
 [pass 3](03-third-pass-live-tests.md).
 
 ## Correction: how item content actually gets assigned — a live-gameplay action, not an edit-time UI action

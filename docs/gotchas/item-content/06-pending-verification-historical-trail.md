@@ -1,11 +1,15 @@
+---
+description: The original pending-verification notes, kept as the historical trail behind the confirmed result.
+---
+
 # Historical trail: how `ToSpawnList` was found, before the restart test confirmed it
 
-Part of the [item-content investigation](index.md). This is the original,
+Part of the [item-content investigation](overview.md). This is the original,
 in-the-moment writeup from before the restart-persistence check described
 in [pass 5](05-real-property-and-itemspawner-v3-confirmed.md) was done —
 kept for the historical trail (how the discovery actually happened), not as
 current guidance. If you just want the confirmed how-to, see
-[../../how-to-set-item-spawner-content.md](../../how-to-set-item-spawner-content.md).
+[../../how-to/set-item-spawner-content.md](../../how-to/set-item-spawner-content.md).
 
 ---
 

@@ -1,8 +1,12 @@
+---
+description: Device-to-device event hookups are Details-panel-only from Python; Verse can do it but can't be compiled headlessly.
+---
+
 # Device-to-device event wiring
 
 ## From Python: any `GameplayEventFunction`/`GameplayEventDescriptor` property is Details-panel-only
 
-Not just item content (see [item-content/index.md](item-content/index.md))
+Not just item content (see [item-content/overview.md](item-content/overview.md))
 — **any** User Option whose value reads back as a `GameplayEventFunction` or
 `GameplayEventDescriptor` struct (empty `to_dict()`, `export_text()` showing
 `DefaultHandlerFunctions=()`/`EventSubscriptions=()` when unwired) is a
@@ -61,7 +65,7 @@ for this: Epic's own `item_spawner_device` Verse API reference has no
 function to set which item is configured (`SpawnItem`/`CycleToNextItem`/
 `Enable`/`Disable`/respawn-timer setters only) — same wall as the Python
 side, so this one isn't a Verse workaround candidate the way event wiring
-is. See [item-content/index.md](item-content/index.md) for the full
+is. See [item-content/overview.md](item-content/overview.md) for the full
 detail.
 
 ## New wall (SkyWars, session 10, 2026-08-10): binding a native device to a custom Verse device's `@editable` reference is not Python-settable

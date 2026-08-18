@@ -1,6 +1,10 @@
+---
+description: Second pass: corroborating the first pass's conclusion against other devices.
+---
+
 # Pass 2 — independent corroboration, still no live editor
 
-Part of the [item-content investigation](index.md). Continues from
+Part of the [item-content investigation](overview.md). Continues from
 [pass 0](01-exception-and-ruled-out-routes.md).
 
 No UEFN editor was connected during this pass either (`get_editor_status`

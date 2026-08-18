@@ -1,3 +1,7 @@
+---
+description: Smaller one-off findings: line_trace_multi's return shape, basic-shape mesh spawning, stale uefn-mcp processes, is_object_valid's tuple return.
+---
+
 # Miscellaneous gotchas
 
 Smaller findings that don't need their own file. Add to this file for a new
@@ -175,7 +179,7 @@ ground, not just to sitting an actor on it.
 
 ## Taking a real screenshot of the level from Python — SUPERSEDED
 
-**Read [`../how-to-screenshot-the-level.md`](../how-to-screenshot-the-level.md)
+**Read [`../how-to/screenshot-the-level.md`](../how-to/screenshot-the-level.md)
 instead.** `SceneCapture2D` works reliably and synchronously; the section below
 describes two APIs (`take_high_res_screenshot` and the `HighResShot` console
 command) that were later confirmed to be dead ends, after four sessions were

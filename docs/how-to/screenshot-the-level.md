@@ -1,3 +1,7 @@
+---
+description: Render the level to a PNG from Python via SceneCapture2D, so Claude can look at the map itself.
+---
+
 # Screenshotting the level from Python (works — use `SceneCapture2D`)
 
 Claude can see the map on its own. Spawn a `SceneCapture2D`, point it at a

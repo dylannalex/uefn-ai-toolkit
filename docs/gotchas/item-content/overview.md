@@ -1,9 +1,13 @@
+---
+description: The full multi-pass investigation into whether item/weapon content is ever scriptable — read before re-testing anything here.
+---
+
 # Can UEFN item/weapon content ever be set via script?
 
 **RESOLVED 2026-08-09, partially.** Confirmed scriptable for
 `Device_ItemSpawner_V3_C` (chests, global-spawn pads) via
 `Minigame_Spawner_Component.ToSpawnList`, survives a real editor restart —
-see [../../how-to-set-item-spawner-content.md](../../how-to-set-item-spawner-content.md)
+see [../../how-to/set-item-spawner-content.md](../../how-to/set-item-spawner-content.md)
 for the working method. **Still confirmed unscriptable for
 `Device_ItemGranter_V2_C`** — its equivalent component
 (`PickupItemListComponent_C.ItemList`) rejects instance writes with the
@@ -44,7 +48,7 @@ other item-holding device not yet checked).
 
 Not yet done: a dedicated `@mcp.tool()` (e.g. `set_item_spawner_content`) in
 `src/uefn_mcp/server.py` wrapping the working Item Spawner V3 method — see
-[../../architecture.md](../../architecture.md) for how existing tools are
+[../../internals/architecture.md](../../internals/architecture.md) for how existing tools are
 structured. Also not done: finding a scriptable path for Item Granter or
 any other item-holding device.
 

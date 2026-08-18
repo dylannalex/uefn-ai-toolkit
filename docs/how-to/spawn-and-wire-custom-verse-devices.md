@@ -1,6 +1,10 @@
+---
+description: Spawning a project's own compiled Verse creative_device, reading/writing its @editable fields, and the Verse-tag workaround for the native-device binding wall.
+---
+
 # How to spawn and wire a custom (project-authored) Verse device
 
-**Status: spawning, reading/writing `@editable` scalars, and the full Verse-tag workaround (declare → compile → add `VerseTagMarkup` component → set its tag → `FindCreativeObjectsWithTag` in Verse) are all confirmed working (SkyWars, session 10, 2026-08-10 — compiled clean, 32/32 actors tagged and read back correctly, level saved).** Binding a native device directly into an `@editable` object reference remains a confirmed wall — the tag workaround is what routes around it. **Not yet confirmed by a playtest** that the alternator/drip logic behaves correctly at runtime, only that every step up through tagging and saving worked. See [gotchas/event-wiring.md](gotchas/event-wiring.md) for the full investigation trail this doc summarizes.
+**Status: spawning, reading/writing `@editable` scalars, and the full Verse-tag workaround (declare → compile → add `VerseTagMarkup` component → set its tag → `FindCreativeObjectsWithTag` in Verse) are all confirmed working (SkyWars, session 10, 2026-08-10 — compiled clean, 32/32 actors tagged and read back correctly, level saved).** Binding a native device directly into an `@editable` object reference remains a confirmed wall — the tag workaround is what routes around it. **Not yet confirmed by a playtest** that the alternator/drip logic behaves correctly at runtime, only that every step up through tagging and saving worked. See [gotchas/event-wiring.md](../gotchas/event-wiring.md) for the full investigation trail this doc summarizes.
 
 ## Scope — read this first
 
@@ -10,10 +14,10 @@ This is about a **project's own Verse-authored `creative_device` class** (added 
 | --- | --- |
 | Spawning an instance of it | **Yes** — needs a specific technique, not the obvious one (see Part 1) |
 | Reading/writing its `@editable` **scalar** fields (`float`, `int`, `logic`, `string`) | **Yes** — same as any other device's User Options, once you have the mangled property name (Part 2) |
-| Binding a **native** device actor (Timer, Item Spawner, etc.) into an `@editable` field typed as that device's Verse interface (`timer_device`, `item_spawner_device`, ...) | **No** — confirmed wall, see [gotchas/event-wiring.md](gotchas/event-wiring.md) |
+| Binding a **native** device actor (Timer, Item Spawner, etc.) into an `@editable` field typed as that device's Verse interface (`timer_device`, `item_spawner_device`, ...) | **No** — confirmed wall, see [gotchas/event-wiring.md](../gotchas/event-wiring.md) |
 | Binding one **custom Verse device** to another's `@editable` field | Untested — no project has needed it yet |
 | Working around the native-device-binding wall via Verse tags instead of `@editable` refs | **Written, staged, not yet compile-verified** — see Part 4 |
-| Compiling/recompiling Verse code itself | **No** — no scriptable trigger exists, confirmed dead end (see [gotchas/event-wiring.md](gotchas/event-wiring.md)'s "From Verse" section). Always a manual `Verse > Build Verse Code` (Ctrl+Shift+B) click. |
+| Compiling/recompiling Verse code itself | **No** — no scriptable trigger exists, confirmed dead end (see [gotchas/event-wiring.md](../gotchas/event-wiring.md)'s "From Verse" section). Always a manual `Verse > Build Verse Code` (Ctrl+Shift+B) click. |
 
 ## Part 1 — spawning a compiled custom Verse device
 
@@ -74,7 +78,7 @@ script_obj.set_editor_property("__verse_0x69AF1449_SpawnTimer", timer_actor)
 # (allowed Class type: 'timer_device')
 ```
 
-Unlike a custom Verse device (which exposes its instance via the `Script` sub-object from Part 1), a **native** device actor has no persistent sub-object anywhere reachable from Python that implements its Verse interface — confirmed via a full non-delta JSON dump (zero hits for `__verse_0x`, "Wrapper", "Interface", or the interface class name). The native→Verse-interface adapter is created by a C++-only function inside the `VerseDevices` module; every angle tried to reach it from Python failed (direct assignment, path-string assignment, `unreal.VerseCreativeDevice.cast()`, casting through the loaded interface class via both `load_object` and `load_class`, inspecting `VerseDeviceWrapperClassMap` — the real native-class→interface-class lookup table, but pure data, no callable). Full blow-by-blow in [gotchas/event-wiring.md](gotchas/event-wiring.md).
+Unlike a custom Verse device (which exposes its instance via the `Script` sub-object from Part 1), a **native** device actor has no persistent sub-object anywhere reachable from Python that implements its Verse interface — confirmed via a full non-delta JSON dump (zero hits for `__verse_0x`, "Wrapper", "Interface", or the interface class name). The native→Verse-interface adapter is created by a C++-only function inside the `VerseDevices` module; every angle tried to reach it from Python failed (direct assignment, path-string assignment, `unreal.VerseCreativeDevice.cast()`, casting through the loaded interface class via both `load_object` and `load_class`, inspecting `VerseDeviceWrapperClassMap` — the real native-class→interface-class lookup table, but pure data, no callable). Full blow-by-blow in [gotchas/event-wiring.md](../gotchas/event-wiring.md).
 
 **Do not re-attempt this from scratch** — re-read the gotchas doc first if you think you've found a new angle, since several plausible-looking ones are already ruled out there.
 
@@ -156,4 +160,4 @@ Read back to confirm: `tag_markup.get_editor_property("InternalTags").get_editor
 
 ## Compiling
 
-No scriptable trigger exists for `Verse > Build Verse Code` — this is a hard platform wall, not a missing wrapper (see [gotchas/event-wiring.md](gotchas/event-wiring.md)'s "From Verse" section for what was ruled out: no `unreal`-exposed Verse-build subsystem, no headless CLI verb, the Lore CLI explicitly can't run alongside an open editor). Every device class change, and every new/changed tag declaration, needs a human to click Build in UEFN before any of the above works.
+No scriptable trigger exists for `Verse > Build Verse Code` — this is a hard platform wall, not a missing wrapper (see [gotchas/event-wiring.md](../gotchas/event-wiring.md)'s "From Verse" section for what was ruled out: no `unreal`-exposed Verse-build subsystem, no headless CLI verb, the Lore CLI explicitly can't run alongside an open editor). Every device class change, and every new/changed tag declaration, needs a human to click Build in UEFN before any of the above works.

@@ -1,3 +1,7 @@
+---
+description: The MCP connection itself: how uefn-mcp gets launched and how it exchanges messages with Claude Code over stdio.
+---
+
 # How Claude talks to `uefn-mcp`
 
 The other docs cover what happens *after* Claude decides to call a tool ([request-lifecycle.md](request-lifecycle.md)) and what `uefn-mcp` then says to UEFN ([protocol.md](protocol.md)). This one covers the layer in between: the MCP connection itself — the thing that has to exist before any of that can happen. Written as the questions people actually ask.
@@ -37,7 +41,7 @@ This is a completely separate process from UEFN. At this point nothing has tried
 
 ## How does Claude actually talk to it, mechanically?
 
-Over **stdio** — the child process's standard input and standard output are the entire connection. There's no port, no localhost URL, nothing you'd see in a network tool. Claude Code writes MCP protocol messages (JSON-RPC 2.0) to the process's stdin; `uefn-mcp` writes its responses to stdout. The `MCPServer` object in [server.py](../src/uefn_mcp/server.py) (from the `mcp` Python package) is what handles that JSON-RPC layer — reading requests, matching them to the right `@mcp.tool()`-decorated function by name, and writing back the return value as the response. None of the tool functions in `server.py` see this directly; they just get called with plain Python arguments and return plain Python values.
+Over **stdio** — the child process's standard input and standard output are the entire connection. There's no port, no localhost URL, nothing you'd see in a network tool. Claude Code writes MCP protocol messages (JSON-RPC 2.0) to the process's stdin; `uefn-mcp` writes its responses to stdout. The `MCPServer` object in [server.py](../../src/uefn_mcp/server.py) (from the `mcp` Python package) is what handles that JSON-RPC layer — reading requests, matching them to the right `@mcp.tool()`-decorated function by name, and writing back the return value as the response. None of the tool functions in `server.py` see this directly; they just get called with plain Python arguments and return plain Python values.
 
 Two kinds of messages matter here:
 
