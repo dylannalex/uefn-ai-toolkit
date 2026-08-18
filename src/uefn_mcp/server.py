@@ -492,30 +492,69 @@ def set_actor_transform(
     location: Vec3 | None = None,
     rotation: Vec3 | None = None,
     scale: Vec3 | None = None,
+    save: bool = True,
 ) -> dict:
-    """Move/rotate/scale the actor with the given label. Any of location,
-    rotation, or scale left unset is left unchanged.
+    """Move/rotate/scale the actor with the given label, and make it stick.
+
+    Any of location, rotation or scale left unset is left unchanged.
+
+    A bare `set_actor_location` looks like it worked and does not survive an
+    editor restart: it never dirties the actor's World Partition package, so
+    the save writes nothing while reporting success. It also leaves the
+    collision body at the old position, so the mesh renders in the new place
+    but is not standable. This tool handles both -- it calls `modify()` first,
+    moves with `teleport=True`, then nudges the actor 1cm and back to rebuild
+    collision, and saves dirty packages.
+
+    Check `dirty_packages_before_save` in the result: if it is 0, nothing was
+    written to disk. Verify geometry with a line trace, never with bounds --
+    bounds report the new position whether or not collision followed.
+
+    Args:
+        label: Editor label of the actor to move.
+        location: New world location {"x", "y", "z"} in cm.
+        rotation: New world rotation {"pitch", "yaw", "roll"} in degrees.
+        scale: New actor scale {"x", "y", "z"}.
+        save: Save dirty packages afterwards. Pass False only when moving many
+            actors in a row, and then call `save_level` at the end -- an
+            unsaved transform is lost on restart.
     """
     return get_bridge().exec_json(
         _ACTOR_LOOKUP
         + "if _actor is None:\n"
         "    result = {'success': False, 'error': \"No actor with label '\" + _params['label'] + \"'\"}\n"
         "else:\n"
+        "    _esu = unreal.EditorLoadingAndSavingUtils\n"
         "    _loc = _params.get('location')\n"
         "    _rot = _params.get('rotation')\n"
         "    _scl = _params.get('scale')\n"
+        "    _actor.modify()\n"
         "    if _loc:\n"
-        "        _actor.set_actor_location(unreal.Vector(x=_loc.get('x', 0.0), y=_loc.get('y', 0.0), z=_loc.get('z', 0.0)), False, False)\n"
+        "        _actor.set_actor_location(unreal.Vector(x=_loc.get('x', 0.0), y=_loc.get('y', 0.0), z=_loc.get('z', 0.0)), False, True)\n"
         "    if _rot:\n"
-        "        _actor.set_actor_rotation(unreal.Rotator(pitch=_rot.get('pitch', 0.0), yaw=_rot.get('yaw', 0.0), roll=_rot.get('roll', 0.0)), False)\n"
+        "        _actor.set_actor_rotation(unreal.Rotator(pitch=_rot.get('pitch', 0.0), yaw=_rot.get('yaw', 0.0), roll=_rot.get('roll', 0.0)), True)\n"
         "    if _scl:\n"
         "        _actor.set_actor_scale3d(unreal.Vector(x=_scl.get('x', 1.0), y=_scl.get('y', 1.0), z=_scl.get('z', 1.0)))\n"
+        "    _p = _actor.get_actor_location()\n"
+        "    _actor.set_actor_location(unreal.Vector(_p.x, _p.y, _p.z + 1.0), False, True)\n"
+        "    _actor.set_actor_location(unreal.Vector(_p.x, _p.y, _p.z), False, True)\n"
+        "    _dirty_before = len(_esu.get_dirty_map_packages())\n"
+        "    _dirty_after = None\n"
+        "    if _params.get('save', True):\n"
+        "        _esu.save_dirty_packages(True, True)\n"
+        "        _dirty_after = len(_esu.get_dirty_map_packages())\n"
         + _transform_dict(indent=4)
-        + "    result = {'success': True, **_transform}\n",
+        + "    result = {\n"
+        "        'success': True,\n"
+        "        'dirty_packages_before_save': _dirty_before,\n"
+        "        'dirty_packages_after_save': _dirty_after,\n"
+        "        **_transform,\n"
+        "    }\n",
         label=label,
         location=location,
         rotation=rotation,
         scale=scale,
+        save=save,
     )
 
 
@@ -589,17 +628,450 @@ def list_content_assets(
 
 
 @mcp.tool()
-def save_level(all_dirty: bool = False) -> dict:
-    """Save the current level. If `all_dirty` is True, saves all dirty levels instead."""
+def save_level() -> dict:
+    """Save everything modified in the level, and report whether it reached disk.
+
+    Saves through `save_dirty_packages` rather than `save_current_level`: a
+    UEFN level is World Partitioned, so each actor lives in its own external
+    package and saving only the level package leaves actor edits on the floor.
+
+    `dirty_packages_before` is the number that matters. If it is 0 while you
+    expect changes, those changes never dirtied anything and are not being
+    written -- the usual cause is a transform applied without `modify()`.
+    `dirty_packages_after` should be 0.
+    """
     return get_bridge().exec_json(
         "import unreal\n"
-        "_les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)\n"
-        "if _params.get('all_dirty'):\n"
-        "    _ok = _les.save_all_dirty_levels()\n"
+        "_esu = unreal.EditorLoadingAndSavingUtils\n"
+        "_before = len(_esu.get_dirty_map_packages())\n"
+        "_esu.save_dirty_packages(True, True)\n"
+        "_after = len(_esu.get_dirty_map_packages())\n"
+        "result = {\n"
+        "    'success': _after == 0,\n"
+        "    'dirty_packages_before': _before,\n"
+        "    'dirty_packages_after': _after,\n"
+        "}\n",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Persistence and validation
+#
+# These encode procedures documented in docs/gotchas/ that were still being
+# re-derived by hand every session, and got done wrong. Each has a single
+# correct form, so it belongs in the tool rather than in prose a caller has to
+# remember at the right moment.
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def validate_level(save_first: bool = True, limit: int = 100) -> dict:
+    """Check every actor in the level for content that will fail to publish.
+
+    Fortnite only allows assets on its Creative exposure list, and a reference
+    to a disallowed one surfaces through the editor's validator rather than at
+    spawn time.
+
+    Args:
+        save_first: Save dirty packages before validating. Keep this True.
+            `is_object_valid` reads VALID on a freshly-spawned actor and
+            INVALID on that same actor right after a save, so a pre-save check
+            gives false clean bills of health -- it has done so twice here.
+        limit: Maximum number of invalid actors to list in the result.
+    """
+    return get_bridge().exec_json(
+        "import unreal\n"
+        "_eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)\n"
+        "_esu = unreal.EditorLoadingAndSavingUtils\n"
+        "_dirty_before = _dirty_after = None\n"
+        "if _params.get('save_first', True):\n"
+        "    _dirty_before = len(_esu.get_dirty_map_packages())\n"
+        "    _esu.save_dirty_packages(True, True)\n"
+        "    _dirty_after = len(_esu.get_dirty_map_packages())\n"
+        "_ev = unreal.get_editor_subsystem(unreal.EditorValidatorSubsystem)\n"
+        "_invalid = []\n"
+        "_checked = 0\n"
+        "for _a in _eas.get_all_level_actors():\n"
+        "    _checked += 1\n"
+        "    _r = _ev.is_object_valid(_a, unreal.DataValidationUsecase.MANUAL)\n"
+        # is_object_valid returns (result, warnings, errors), not the bare
+        # enum; comparing the tuple to the enum flags every actor in a clean
+        # level, which cost a debugging round the one time it was done.
+        "    _errors = [str(_e) for _e in list(_r[2])]\n"
+        "    if _r[0] != unreal.DataValidationResult.VALID or _errors:\n"
+        "        if len(_invalid) < _params.get('limit', 100):\n"
+        "            _invalid.append({'label': _a.get_actor_label(), 'errors': _errors})\n"
+        "result = {\n"
+        "    'checked': _checked,\n"
+        "    'invalid_count': len(_invalid),\n"
+        "    'invalid': _invalid,\n"
+        "    'saved_before_validating': bool(_params.get('save_first', True)),\n"
+        "    'dirty_packages_before_save': _dirty_before,\n"
+        "    'dirty_packages_after_save': _dirty_after,\n"
+        "}\n",
+        save_first=save_first,
+        limit=limit,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Custom Verse devices
+# ---------------------------------------------------------------------------
+
+# load_class returns None for a project's own compiled Verse class;
+# load_object is the one that works.
+_VERSE_CLASS = (
+    "def _verse_class(project, name):\n"
+    "    return unreal.load_object(None, '/' + project + '/_Verse.' + name)\n"
+)
+
+_NO_SCRIPT = (
+    "Actor has no Script sub-object -- it is not a custom Verse device."
+)
+
+
+@mcp.tool()
+def spawn_verse_device(
+    project_name: str,
+    verse_class_name: str,
+    location: Vec3 | None = None,
+    label: str | None = None,
+) -> dict:
+    """Spawn one of the project's own compiled Verse `creative_device`s.
+
+    A compiled Verse class does not appear in the asset registry and is not
+    reachable through `spawn_actor` -- it lives under the project's own
+    content root as `/<ProjectName>/_Verse.<verse_class_name>`, and only
+    `spawn_actor_from_object` accepts it.
+
+    The spawned actor is a generic `VerseDevice_C`; the instance holding the
+    `@editable` fields is its `Script` sub-object, whose class path is
+    returned here so you can confirm the right device was spawned.
+
+    Args:
+        project_name: The UEFN project name, which is also its content root
+            (e.g. "SkyWars" -> "/SkyWars").
+        verse_class_name: The Verse class name as written in the .verse source
+            (e.g. "personal_drip_manager").
+        location: World location {"x", "y", "z"} in cm. Defaults to origin.
+        label: Optional editor display name.
+    """
+    return get_bridge().exec_json(
+        "import unreal\n"
+        "_eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)\n"
+        + _VERSE_CLASS
+        + "_cls = _verse_class(_params['project_name'], _params['verse_class_name'])\n"
+        "if _cls is None:\n"
+        "    result = {'success': False, 'error': 'No compiled Verse class at /'"
+        " + _params['project_name'] + '/_Verse.' + _params['verse_class_name']"
+        " + '. Verse must be compiled in UEFN (Verse > Build Verse Code) before"
+        " its classes exist; there is no scriptable compile.'}\n"
         "else:\n"
-        "    _ok = _les.save_current_level()\n"
-        "result = {'success': bool(_ok)}\n",
-        all_dirty=all_dirty,
+        "    _loc = _params.get('location') or {}\n"
+        "    _v = unreal.Vector(x=_loc.get('x', 0.0), y=_loc.get('y', 0.0), z=_loc.get('z', 0.0))\n"
+        "    _actor = _eas.spawn_actor_from_object(_cls, _v)\n"
+        "    if _actor is None:\n"
+        "        result = {'success': False, 'error': 'spawn_actor_from_object returned None'}\n"
+        "    else:\n"
+        "        if _params.get('label'):\n"
+        "            _actor.set_actor_label(_params['label'])\n"
+        "        _script = _actor.get_editor_property('Script')\n"
+        "        result = {\n"
+        "            'success': True,\n"
+        "            'label': _actor.get_actor_label(),\n"
+        "            'actor_class': _actor.get_class().get_path_name(),\n"
+        "            'script_class': _script.get_class().get_path_name() if _script else None,\n"
+        "        }\n",
+        project_name=project_name,
+        verse_class_name=verse_class_name,
+        location=location,
+        label=label,
+    )
+
+
+@mcp.tool()
+def list_verse_editables(label: str) -> dict:
+    """List the `@editable` fields of a spawned custom Verse device.
+
+    Verse property names are mangled to `__verse_0x<CRC>_<Name>`, and the hash
+    is not derivable by hand, so the real names have to be read off the object
+    itself. Use the names this returns with `set_verse_editable`.
+    """
+    return get_bridge().exec_json(
+        _ACTOR_LOOKUP
+        + "if _actor is None:\n"
+        "    result = {'success': False, 'error': \"No actor with label '\" + _params['label'] + \"'\"}\n"
+        "else:\n"
+        "    import re as _re\n"
+        "    _script = _actor.get_editor_property('Script')\n"
+        "    if _script is None:\n"
+        "        result = {'success': False, 'error': " + repr(_NO_SCRIPT) + "}\n"
+        "    else:\n"
+        "        _opt = unreal.JsonStringifyOptions()\n"
+        # Without DISABLE_DELTA_ENCODING the dump omits every property still
+        # at its Verse-side default, so unset fields never show up at all.
+        "        _opt.set_editor_property('flags', unreal.JsonStringifyFlags.DISABLE_DELTA_ENCODING)\n"
+        "        _j = unreal.JsonObjectGraphFunctionLibrary.stringify([_script], _opt)\n"
+        "        _found = []\n"
+        "        _names = []\n"
+        "        for _m in _re.finditer('__verse_0x[0-9A-Fa-f]+_([A-Za-z0-9_]+)', _j):\n"
+        "            if _m.group(0) not in _names:\n"
+        "                _names.append(_m.group(0))\n"
+        "                _found.append({'property': _m.group(0), 'verse_name': _m.group(1)})\n"
+        "        result = {'success': True, 'script_class': _script.get_class().get_path_name(), 'editables': _found}\n",
+        label=label,
+    )
+
+
+@mcp.tool()
+def set_verse_editable(
+    label: str, property_name: str, value: float | int | str | bool
+) -> dict:
+    """Set a scalar `@editable` field on a spawned custom Verse device.
+
+    `property_name` is the mangled name from `list_verse_editables`, not the
+    plain field name in the .verse source.
+
+    Scalars only. A field typed as a native device (`@editable X : timer_device`)
+    cannot be assigned from Python at all: native devices expose no Verse
+    interface object reachable from here, and every angle at it is already
+    ruled out. Use `add_verse_tag` and runtime tag lookup instead.
+    """
+    return get_bridge().exec_json(
+        _ACTOR_LOOKUP
+        + "if _actor is None:\n"
+        "    result = {'success': False, 'error': \"No actor with label '\" + _params['label'] + \"'\"}\n"
+        "else:\n"
+        "    _script = _actor.get_editor_property('Script')\n"
+        "    if _script is None:\n"
+        "        result = {'success': False, 'error': " + repr(_NO_SCRIPT) + "}\n"
+        "    else:\n"
+        "        _script.set_editor_property(_params['property_name'], _params['value'])\n"
+        "        _read = _script.get_editor_property(_params['property_name'])\n"
+        "        if not isinstance(_read, (int, float, str, bool)):\n"
+        "            _read = str(_read)\n"
+        "        result = {'success': True, 'property': _params['property_name'], 'value': _read}\n",
+        label=label,
+        property_name=property_name,
+        value=value,
+    )
+
+
+@mcp.tool()
+def add_verse_tag(label: str, project_name: str, tag_class_name: str) -> dict:
+    """Tag a placed actor with a Verse tag class, so Verse code can find it.
+
+    This is the way around the wall that a native device cannot be bound into
+    a custom Verse device's `@editable` field: the Verse code looks its
+    targets up at runtime with `FindCreativeObjectsWithTag` instead, and
+    attaching the tag is fully scriptable.
+
+    Adds a `VerseTagMarkupComponent` if the actor has none, then appends the
+    tag. Tags already on the actor are kept.
+
+    Args:
+        label: Editor label of the actor to tag.
+        project_name: The UEFN project name / content root (e.g. "SkyWars").
+        tag_class_name: The Verse tag class name (e.g. "my_target_tag"),
+            declared as `my_target_tag := class(tag){}` and compiled.
+    """
+    return get_bridge().exec_json(
+        _ACTOR_LOOKUP
+        + _VERSE_CLASS
+        + "if _actor is None:\n"
+        "    result = {'success': False, 'error': \"No actor with label '\" + _params['label'] + \"'\"}\n"
+        "else:\n"
+        "    _tag = _verse_class(_params['project_name'], _params['tag_class_name'])\n"
+        "    if _tag is None:\n"
+        "        result = {'success': False, 'error': 'No compiled Verse tag class at /'"
+        " + _params['project_name'] + '/_Verse.' + _params['tag_class_name']"
+        " + '. Tags are declared in Verse and need a manual compile in UEFN first.'}\n"
+        "    else:\n"
+        "        _markups = _actor.get_components_by_class(unreal.VerseTagMarkupComponent)\n"
+        "        if not _markups:\n"
+        # add_new_subobject is the call the Details panel's Add Component
+        # button makes. Note get_engine_subsystem: the editor one rejects
+        # SubobjectDataSubsystem outright.
+        "            _sub = unreal.get_engine_subsystem(unreal.SubobjectDataSubsystem)\n"
+        "            _handles = _sub.k2_gather_subobject_data_for_instance(_actor)\n"
+        "            _p = unreal.AddNewSubobjectParams()\n"
+        "            _p.set_editor_property('parent_handle', _handles[0])\n"
+        "            _p.set_editor_property('new_class', unreal.VerseTagMarkupComponent)\n"
+        "            _handle, _fail = _sub.add_new_subobject(_p)\n"
+        "            if str(_fail):\n"
+        "                raise RuntimeError('add_new_subobject failed: ' + str(_fail))\n"
+        "            _markups = _actor.get_components_by_class(unreal.VerseTagMarkupComponent)\n"
+        "        _markup = _markups[0]\n"
+        "        _container = _markup.get_editor_property('InternalTags')\n"
+        "        _existing = list(_container.get_editor_property('InternalTags'))\n"
+        "        _paths = []\n"
+        "        for _i in _existing:\n"
+        "            _t = _i.get_editor_property('InternalTag')\n"
+        "            if _t:\n"
+        "                _paths.append(_t.get_path_name())\n"
+        "        if _tag.get_path_name() not in _paths:\n"
+        # InternalTags is an array of VerseTagTypeInfo structs, not of raw
+        # class references -- passing the class straight in fails.
+        "            _info = unreal.VerseTagTypeInfo()\n"
+        "            _info.set_editor_property('InternalTag', _tag)\n"
+        "            _existing.append(_info)\n"
+        "            _container.set_editor_property('InternalTags', _existing)\n"
+        "            _markup.set_editor_property('InternalTags', _container)\n"
+        "        _back = _markup.get_editor_property('InternalTags').get_editor_property('InternalTags')\n"
+        "        _tags = []\n"
+        "        for _i in _back:\n"
+        "            _t = _i.get_editor_property('InternalTag')\n"
+        "            if _t:\n"
+        "                _tags.append(_t.get_path_name())\n"
+        "        result = {'success': True, 'label': _actor.get_actor_label(), 'tags': _tags}\n",
+        label=label,
+        project_name=project_name,
+        tag_class_name=tag_class_name,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Item content
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def set_item_spawner_content(label: str, items: list[dict]) -> dict:
+    """Set what an Item Spawner V3 device spawns.
+
+    Item Spawner V3 is the only device whose item content is writable from
+    Python. Item Granter and Class Designer hold theirs in a component that
+    rejects instance writes -- a platform wall, not a missing wrapper -- so
+    anything that needs scripted item content has to be built on this device.
+
+    Args:
+        label: Editor label of a `Device_ItemSpawner_V3_C` actor.
+        items: One entry per item, `{"asset_path": str, "quantity": int}`.
+            `asset_path` is an item definition (e.g.
+            "/Game/Athena/Items/Weapons/WID_Assault_Auto_Athena_C_Ore_T02").
+            Several entries feed the "Random Spawns" User Option.
+    """
+    return get_bridge().exec_json(
+        _ACTOR_LOOKUP
+        + "if _actor is None:\n"
+        "    result = {'success': False, 'error': \"No actor with label '\" + _params['label'] + \"'\"}\n"
+        "else:\n"
+        "    _comp = None\n"
+        "    for _c in _actor.get_components_by_class(unreal.ActorComponent):\n"
+        "        if 'Minigame_Spawner' in _c.get_class().get_name():\n"
+        "            _comp = _c\n"
+        "            break\n"
+        "    if _comp is None:\n"
+        "        result = {'success': False, 'error': 'Actor has no Minigame_Spawner_Component -- it is not an Item Spawner V3.'}\n"
+        "    else:\n"
+        "        _entries = []\n"
+        "        _missing = []\n"
+        "        for _it in _params['items']:\n"
+        "            _asset = unreal.load_asset(_it['asset_path'])\n"
+        "            if _asset is None:\n"
+        "                _missing.append(_it['asset_path'])\n"
+        "                continue\n"
+        "            _e = unreal.MinigameSpawnerSpawnParams()\n"
+        "            _e.set_editor_property('pickup_to_spawn', _asset)\n"
+        "            _e.set_editor_property('pickup_quantity', _it.get('quantity', 1))\n"
+        "            _entries.append(_e)\n"
+        "        if _missing:\n"
+        # A registry hit does not mean an asset loads; several item families
+        # show up in the registry and fail load_asset in this build.
+        "            result = {'success': False, 'error': 'These asset paths did not load: '"
+        " + ', '.join(_missing) + '. Confirm a path with load_asset before using it --"
+        " an asset registry hit is not enough.'}\n"
+        "        else:\n"
+        "            _comp.set_editor_property('ToSpawnList', _entries)\n"
+        "            _back = _comp.get_editor_property('ToSpawnList')\n"
+        "            _items = []\n"
+        "            for _b in _back:\n"
+        "                _items.append({\n"
+        "                    'asset': _b.get_editor_property('pickup_to_spawn').get_path_name(),\n"
+        "                    'quantity': _b.get_editor_property('pickup_quantity'),\n"
+        "                })\n"
+        "            result = {'success': True, 'label': _actor.get_actor_label(), 'items': _items}\n",
+        label=label,
+        items=items,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Looking at the map
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def screenshot_level(
+    output_dir: str,
+    filename: str,
+    location: Vec3,
+    rotation: Vec3,
+    width: int = 1280,
+    height: int = 720,
+    fov: float = 70.0,
+    exposure_bias: float = 11.0,
+) -> dict:
+    """Render the level from a viewpoint to a PNG, so Claude can look at it.
+
+    Spawns a temporary `SceneCapture2D`, captures, exports and destroys it.
+    Synchronous, leaves nothing in the level, and does not touch the user's
+    viewport or window focus. Read the resulting file with an image-capable
+    reader.
+
+    Do not reach for `HighResShot` or `take_high_res_screenshot` instead --
+    both are confirmed dead ends that cost four sessions between them.
+
+    Args:
+        output_dir: Directory on the machine running UEFN to write into.
+        filename: File name, e.g. "overview.png".
+        location: Camera world location {"x", "y", "z"} in cm.
+        rotation: Camera rotation {"pitch", "yaw", "roll"} in degrees.
+        width: Image width in pixels.
+        height: Image height in pixels.
+        fov: Field of view in degrees.
+        exposure_bias: Manual exposure bias. The default suits a lit outdoor
+            scene; raise it if the render comes back black.
+    """
+    return get_bridge().exec_json(
+        "import unreal\n"
+        "import os as _os\n"
+        "_ues = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem)\n"
+        "_world = _ues.get_editor_world()\n"
+        "_eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)\n"
+        "_loc = _params['location']\n"
+        "_rot = _params['rotation']\n"
+        "_v = unreal.Vector(x=_loc.get('x', 0.0), y=_loc.get('y', 0.0), z=_loc.get('z', 0.0))\n"
+        "_r = unreal.Rotator(pitch=_rot.get('pitch', 0.0), yaw=_rot.get('yaw', 0.0), roll=_rot.get('roll', 0.0))\n"
+        # RTF_RGBA8 is required: the default float format makes
+        # export_render_target write OpenEXR data under a .png name.
+        "_rt = unreal.RenderingLibrary.create_render_target2d(_world, _params['width'], _params['height'], unreal.TextureRenderTargetFormat.RTF_RGBA8)\n"
+        "_cap = _eas.spawn_actor_from_class(unreal.SceneCapture2D, _v, _r)\n"
+        "try:\n"
+        "    _c = _cap.get_editor_property('capture_component2d')\n"
+        "    _c.set_editor_property('texture_target', _rt)\n"
+        "    _c.set_editor_property('capture_source', unreal.SceneCaptureSource.SCS_FINAL_COLOR_LDR)\n"
+        "    _c.set_editor_property('fov_angle', _params['fov'])\n"
+        "    _pp = unreal.PostProcessSettings()\n"
+        "    _pp.set_editor_property('override_auto_exposure_method', True)\n"
+        "    _pp.set_editor_property('auto_exposure_method', unreal.AutoExposureMethod.AEM_MANUAL)\n"
+        "    _pp.set_editor_property('override_auto_exposure_bias', True)\n"
+        "    _pp.set_editor_property('auto_exposure_bias', _params['exposure_bias'])\n"
+        "    _c.set_editor_property('post_process_settings', _pp)\n"
+        "    _c.capture_scene()\n"
+        "    unreal.RenderingLibrary.export_render_target(_world, _rt, _params['output_dir'], _params['filename'])\n"
+        "finally:\n"
+        "    _eas.destroy_actor(_cap)\n"
+        "_path = _os.path.join(_params['output_dir'], _params['filename'])\n"
+        "result = {'success': _os.path.isfile(_path), 'path': _path}\n",
+        output_dir=output_dir,
+        filename=filename,
+        location=location,
+        rotation=rotation,
+        width=width,
+        height=height,
+        fov=fov,
+        exposure_bias=exposure_bias,
     )
 
 
