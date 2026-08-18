@@ -46,7 +46,7 @@ def index_dir(directory: Path) -> bool:
     body = "\n".join([
         HEADER,
         "",
-        f"# {directory.name}/",
+        f"# {directory.resolve().name}/",  # resolve: Path(".").name is empty
         "",
         "| File | Description |",
         "| --- | --- |",
