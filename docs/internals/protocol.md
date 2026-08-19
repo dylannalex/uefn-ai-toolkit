@@ -47,17 +47,19 @@ sequenceDiagram
 
 ## 2. Opening a command connection (UDP → TCP)
 
-Once a node is chosen, `uefn-mcp` starts listening on a local TCP port (`127.0.0.1:6776` by default) and broadcasts an `open_connection` message addressed to that node's ID, telling it where to connect. The editor then initiates the actual TCP connection back to `uefn-mcp`.
+Once a node is chosen, `uefn-mcp` starts listening on a local TCP port and broadcasts an `open_connection` message addressed to that node's ID, telling it where to connect. The editor then initiates the actual TCP connection back to `uefn-mcp`.
+
+That port is **a free one this process reserves for itself**, not Epic's default. Epic's client hands every process the same 6776 with `SO_REUSEADDR`, so two clients both announce 6776 and the editor's callback lands on whichever bound it last — [`bridge.py`](../../src/uefn_mcp/bridge.py)'s `_free_port()` exists to prevent exactly that. With it, **one editor serves two concurrent command connections without trouble** (measured: two processes, interleaved calls, all succeeded), which is what makes two Claude Code sessions against one editor work.
 
 ```mermaid
 sequenceDiagram
-    participant C as uefn-mcp<br/>(TCP listener on :6776)
+    participant C as uefn-mcp<br/>(TCP listener, own free port)
     participant N as UDP multicast group
     participant E as UEFN editor
 
     C->>N: open_connection (dest=E, data={command_ip, command_port})
     N-->>E: open_connection
-    E->>C: TCP connect to 127.0.0.1:6776
+    E->>C: TCP connect to 127.0.0.1:&lt;command_port&gt;
     Note over C,E: TCP command channel is now open
 ```
 

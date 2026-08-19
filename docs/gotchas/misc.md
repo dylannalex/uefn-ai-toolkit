@@ -28,14 +28,22 @@ Python Scripting + remote execution both correctly enabled for the right
 project — check for **multiple `uefn-mcp.exe` processes** running at once
 before assuming a config/project problem
 (`tasklist | grep uefn-mcp` on Windows). Observed 4 simultaneous instances
-in one session, apparently from prior reconnects that didn't exit cleanly;
-they conflict over the remote-execution multicast port. Killing all of them
-and retrying immediately fixed the connection — a fresh bridge process
-starts automatically on the next tool call. Worth investigating on the
-server side whether `bridge.py`'s reconnect-on-stale-connection logic
-should also be killing/replacing the OS process rather than just the
-in-process connection object, since this seems likely to recur for anyone
-reconnecting across multiple sessions.
+in one session, apparently from prior reconnects that didn't exit cleanly.
+Killing all of them and retrying immediately fixed the connection — a fresh
+bridge process starts automatically on the next tool call.
+
+**The cause was found and fixed.** They were not conflicting over the
+multicast group but over the **command port**: Epic's client defaults every
+process to 6776 with `SO_REUSEADDR`, so several clients all announce 6776 and
+the editor's callback reaches whichever bound it last, leaving the others
+waiting for a connection that never arrives. `bridge.py` now reserves a free
+port per process (`_free_port()`), and two concurrent bridges against one
+editor have since been measured working — interleaved calls from two
+processes, all successful.
+
+So the remedy above still applies to processes left behind from before the
+fix, or to a genuinely wedged one, but multiple live bridges are no longer a
+reason on their own to expect a failure.
 
 ## `unreal.Rotator(a, b, c)` positional args are `(roll, pitch, yaw)`, not `(pitch, yaw, roll)`
 

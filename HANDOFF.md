@@ -10,10 +10,16 @@ migration, not a permanent state of the repository.
 
 ## The one-line status
 
-The consolidation is **written, committed, pushed, and installed as a plugin**.
-What remains unverified is exactly one thing: **no new tool has ever executed
-against a live editor.** Everything that does not need UEFN open has now been
-checked and passes — see 0a.
+The consolidation is **written, committed, pushed, installed, and exercised
+against a live editor.** Every item on the "Do this first" list is done: all
+nine tools pass against SkyWars (0b), `set_actor_transform` survived a real
+UEFN restart, and two concurrent bridges against one editor work, which
+retires fix 2 (0c).
+
+**One check is left, and it needs a fresh session:** that the `uefn` MCP tools
+appear in the tool list and the two skills are offered. 0b was run by calling
+the tool functions directly, which is where the untested code was — the MCP
+transport itself is generic and has never been the thing in doubt.
 
 Since this was written: both repos were pushed on 2026-08-19, this repository
 was renamed **`uefn-mcp` -> `uefn-ai-toolkit`** (repo, folder, plugin and
@@ -164,47 +170,55 @@ reinstalls, and the junction is gone.
 **Before publishing:** push, delete `settings.local.json`, and reinstall
 normally. The tracked `settings.json` is already in the published shape.
 
-### 0b. Exercise every new tool against a live editor — none has ever run
+### 0b. Every tool exercised against a live editor — done 2026-08-19
 
-This is the largest untested surface. All eight were written from the recipes
-in `docs/`, which are themselves grounded in real sessions, but **the tool code
-itself has executed exactly zero times.** Expect at least one wrong property
-name.
+All nine ran against SkyWars (598 actors) and all nine pass. The warning this
+section carried — "expect at least one wrong property name" — **did not come
+true**; no tool needed a fix.
 
-Open UEFN with SkyWars loaded and run them in this order, cheapest first:
-
-| Tool | What to check |
+| Tool | Result |
 | --- | --- |
-| `save_level` | Returns `dirty_packages_before` / `_after`; after should be 0 |
-| `validate_level` | On 598 actors. **Watch for a timeout** — it loops every actor calling `is_object_valid`, and nobody has measured how long that takes. If it hangs, that is the first thing to fix |
-| `screenshot_level` | Writes a real PNG (first bytes `89 50 4e 47`, not OpenEXR's `76 2f 31 01`) |
-| `list_verse_editables` | Against `PersonalDripManager`; should return `__verse_0x…` names |
-| `set_verse_editable` | A scalar, e.g. the drip interval; read it back |
-| `set_item_spawner_content` | Against **one duplicate**, never a live chest |
-| `spawn_verse_device` | Spawn, confirm the `Script` sub-object's class, then delete |
-| `add_verse_tag` | On a throwaway actor first — it mutates a component list |
-| `set_actor_transform` | **Last, and on a throwaway actor.** Then restart UEFN and confirm the move survived. That is the only real test of the fix |
+| `save_level` | ✓ and against a genuinely dirty level: 1 → 0, not just 0 → 0 |
+| `validate_level` | ✓ **4.5 s for 598 actors, 0 invalid.** The timeout fear was unfounded; no batching needed |
+| `screenshot_level` | ✓ real PNG (`89 50 4e 47`), correct exposure — the image was looked at, not just its header |
+| `list_verse_editables` | ✓ 10 `__verse_0x…` fields on `PersonalDripManager` |
+| `set_verse_editable` | ✓ `DripInterval` written and read back |
+| `set_item_spawner_content` | ✓ on a duplicate |
+| `spawn_verse_device` | ✓ `script_class` came back `/SkyWars/_Verse.personal_drip_manager` |
+| `add_verse_tag` | ✓ and **idempotent** — re-applying the same tag does not duplicate it |
+| `set_actor_transform` | ✓ **survived a UEFN restart exactly** (`x=1234, y=-5678, z=21000, yaw=42`) |
 
-`set_actor_transform` is the one that matters: it was the broken tool, its
-whole point is surviving a restart, and a readback in the same session proves
-nothing — that is exactly the trap that lost 19 island moves originally.
+`set_actor_transform` is the one that mattered, and it is the one now actually
+proven: the values were written, saved, UEFN was closed and reopened, and they
+came back unchanged. That is the test a same-session readback cannot give.
 
-### 0c. Measure the bridge fix, then decide about fix 2
+Two calls failed on the way and neither was the tool's fault — a `Vec3` passed
+as a list rather than a `{"x","y","z"}` dict, and an attempt to spawn
+`skywars_tags`, which holds `tag` classes and not a `creative_device`. Both
+errors said precisely that. Worth knowing that the error messages are good
+enough to debug from.
 
-The port collision was fixed (each bridge reserves its own free port). **Fix 2
-— opening and closing the command connection per call — was deliberately not
-done**, because it depends on a fact nobody has: whether the UEFN editor
-accepts more than one command connection at a time. That cannot be seen from
-this side of the socket.
+The `handles[0]` assumption in `add_verse_tag`, flagged below as unverified,
+held on a `Device_ItemSpawner_V3_C` — a different actor class from the recipe
+it came from. Evidence, not proof.
 
-The measurement is ten minutes: open two Claude Code sessions against one
-editor and run `get_editor_status` in both.
+Both probe actors were deleted and the level saved; `get_editor_status` reads
+598 again.
 
-- Both work → fix 1 alone gives full multi-session support; fix 2 is waste.
-- One fails → implement fix 2 (`open_command_connection` / `run_command` /
-  `close_command_connection` per call, keeping UDP discovery open, which is
-  not contended — its socket sets `SO_REUSEADDR` on a multicast group
-  legitimately).
+### 0c. The bridge fix measured — fix 2 is not needed
+
+**One UEFN editor accepts two command connections at once.** Two independent
+processes, each with its own `UEFNBridge` on its own reserved port — which is
+what two Claude Code sessions are — ran three interleaved `get_editor_status`
+calls each, concurrently, and all six succeeded.
+
+By this section's own rule, that settles it: **fix 1 alone gives full
+multi-session support, and fix 2 (open/close the command connection per call)
+is waste.** Do not implement it.
+
+The port-collision fix is what made this work: Epic's client defaults every
+process to 6776 with `SO_REUSEADDR`, so before it, two sessions fought over
+one port until both died. Each bridge now reserves its own.
 
 ---
 
@@ -237,9 +251,11 @@ These came out of a long design interview. Reopening them wastes a session.
   Two generators, two files, both claiming to be generated. They don't
   currently collide (reindex skips directories with no non-INDEX `.md`), but
   it is a thin margin.
-- **`add_verse_tag` assumes `handles[0]` is the root subobject** — true in the
-  recipe it came from, unverified as a general rule.
-- **`validate_level` has no batching.** See the timeout note above.
+- **`add_verse_tag` assumes `handles[0]` is the root subobject** — held on a
+  second actor class (`Device_ItemSpawner_V3_C`) in 0b, so no longer a guess,
+  but still not established as a general rule.
+- **`validate_level` has no batching, and does not need it** — 4.5 s for 598
+  actors. Revisit only if a level gets far larger.
 - **CRLF warnings on every commit.** Cosmetic; no `.gitattributes` was added
   because that is a change to how every file in both repositories is stored
   and was not part of this work.
