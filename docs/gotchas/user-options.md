@@ -20,6 +20,13 @@ Options." It's easy to conclude these are edit-time read-only:
   because these two functions are the *runtime* (Verse-equivalent) override
   API, meant for changing a value mid-match, not the editor-default API.
 
+**Use `get_device_options` / `set_device_options`.** They exist because
+everything on this page had to be remembered on every call otherwise: they
+take and report the exact key, resolve enum members by bare name, read the
+namespaced keys below through the fallback that works, and refuse an
+event-graph option instead of writing into the void. The rest of this page
+is why they do what they do.
+
 **The actual edit-time write path is the plain `get_editor_property` /
 `set_editor_property` pair, using the option's exact key string as the
 property name** — e.g. `device.set_editor_property("bLastStandingWins",
@@ -37,6 +44,19 @@ For **bulk reads** (e.g. keyword-sweeping a device's full option list),
 `device.get_user_option_values()` returns a plain `Map[str, str]` of every
 current key→value — far more usable from Python than
 `get_user_option_definitions()`.
+
+## Namespaced keys (`Mutator:Property`) are read-only by this route
+
+Not every key in that bulk map is reachable with `get_editor_property`. On
+`IslandSettings0`, 224 of ~298 keys are plain; the rest look like
+`CreativeMutator_AutoPickup:AutoPickupAmmoItems`, and reading one raises
+*"Failed to find property … on 'Device_ExperienceSettings_V2_UEFN_C'"* —
+the property lives on a mutator sub-object, not on the device. Their
+**current values are still in the bulk map**, as strings (`"Unset"`,
+`"Disallow"`), which is where `get_device_options` gets them.
+
+No edit-time write path for these is known. `set_device_options` reports
+them as `settable: false` with that reason rather than appearing to work.
 
 Enum-valued properties come back as typed enum instances (e.g.
 `<BuildingMode.ALL: 3>`). To discover the valid values for one, don't guess

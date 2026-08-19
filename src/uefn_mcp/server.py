@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer
@@ -994,6 +995,291 @@ def set_item_spawner_content(label: str, items: list[dict]) -> dict:
         label=label,
         items=items,
     )
+
+
+# ---------------------------------------------------------------------------
+# Device User Options
+# ---------------------------------------------------------------------------
+
+# A User Option holding one of these is an event-graph hookup, not a value:
+# it reads back as an empty struct and assigning to it does nothing. Wiring
+# one device to another needs a custom Verse device instead -- see
+# docs/gotchas/event-wiring.md.
+_EVENT_TYPES = "('GameplayEventFunction', 'GameplayEventDescriptor')"
+
+# Reading one option the way that actually works. The keys are the exact
+# User-Option strings (spaces and capitals included) and do not appear in
+# dir(), so this goes through get_editor_property, never attribute access.
+_READ_OPTION = (
+    "def _read_option(_dev, _key, _bulk=None):\n"
+    "    _entry = {'key': _key}\n"
+    "    try:\n"
+    "        _v = _dev.get_editor_property(_key)\n"
+    "    except Exception as _e:\n"
+    # A "Namespace:Property" key lives on a mutator sub-object rather than on
+    # the device, so get_editor_property cannot see it. Its current value is
+    # still in the bulk map -- as a string, and read-only by this route.
+    "        if _bulk is not None and _key in _bulk:\n"
+    "            _entry['value'] = str(_bulk[_key])\n"
+    "            _entry['type'] = 'str'\n"
+    "            _entry['settable'] = False\n"
+    "            _entry['note'] = ('Lives on a mutator sub-object, not on the device, so'\n"
+    "                              ' set_editor_property cannot reach it. No edit-time'\n"
+    "                              ' write path is known for these.')\n"
+    "            return _entry\n"
+    "        _entry['error'] = str(_e)\n"
+    "        return _entry\n"
+    "    _tn = type(_v).__name__\n"
+    "    _entry['type'] = _tn\n"
+    "    if _tn in " + _EVENT_TYPES + ":\n"
+    "        _entry['value'] = None\n"
+    "        _entry['settable'] = False\n"
+    "        _entry['note'] = 'Event-graph hookup, not a value. Needs a custom Verse device.'\n"
+    "        return _entry\n"
+    "    _entry['settable'] = True\n"
+    "    if isinstance(_v, (bool, int, float, str)):\n"
+    "        _entry['value'] = _v\n"
+    "        return _entry\n"
+    # Enum members are reported by bare name, which is exactly what
+    # set_device_options takes back -- str() would give "<Enum_Foo.BAR: 1>".
+    "    try:\n"
+    "        _entry['value'] = _v.name\n"
+    "        _entry['enum_values'] = [_m.name for _m in list(type(_v))]\n"
+    "    except Exception:\n"
+    "        _entry['value'] = str(_v)\n"
+    "    return _entry\n"
+)
+
+
+@mcp.tool()
+def get_device_options(
+    label: str, contains: str | None = None, limit: int = 60
+) -> dict:
+    """Read a Fortnite device's "User Options" -- its Details-panel settings.
+
+    This is the readable form of the whole "V2" device family (Island
+    Settings, Round Settings, Storm Controller, Item Granter, Class Designer,
+    ...). Use it before `set_device_options` to learn a setting's exact key,
+    its current value, and whether it can be written at all.
+
+    Each returned option carries:
+      - `key`: the exact User-Option string, spaces and capitals included.
+        This is the name to pass to `set_device_options`; there is no
+        snake_case equivalent and these keys do not appear in `dir()`.
+      - `type`: the Python type name of the current value.
+      - `settable`: False for event-graph hookups, which look like ordinary
+        options and silently ignore writes.
+      - `enum_values`: every valid member, when the option is an enum. Read
+        this rather than guessing an enum's spelling.
+
+    Args:
+        label: Editor label of the device actor.
+        contains: Case-insensitive substring filter on the key. A bare
+            Island Settings device has ~300 options, so filter unless you
+            genuinely want to page through all of them.
+        limit: Maximum options to return.
+    """
+    return get_bridge().exec_json(
+        _ACTOR_LOOKUP
+        + _READ_OPTION
+        + "if _actor is None:\n"
+        "    result = {'success': False, 'error': \"No actor with label '\" + _params['label'] + \"'\"}\n"
+        "else:\n"
+        # get_user_option_values is the only usable bulk enumeration:
+        # get_user_option_definitions returns an opaque container with no
+        # len() or iteration.
+        "    try:\n"
+        "        _all = _actor.get_user_option_values()\n"
+        "    except Exception:\n"
+        "        _all = None\n"
+        "    if _all is None:\n"
+        "        result = {'success': False, 'error': 'Actor exposes no User Options -- it is probably not a Fortnite device.'}\n"
+        "    else:\n"
+        "        _keys = sorted(str(_k) for _k in _all.keys())\n"
+        "        _needle = (_params.get('contains') or '').lower()\n"
+        "        if _needle:\n"
+        "            _keys = [_k for _k in _keys if _needle in _k.lower()]\n"
+        "        _total = len(_keys)\n"
+        "        _limit = _params.get('limit', 60)\n"
+        "        _options = [_read_option(_actor, _k, _all) for _k in _keys[:_limit]]\n"
+        "        result = {\n"
+        "            'success': True,\n"
+        "            'label': _actor.get_actor_label(),\n"
+        "            'matched': _total,\n"
+        "            'returned': len(_options),\n"
+        "            'options': _options,\n"
+        "        }\n",
+        label=label,
+        contains=contains,
+        limit=limit,
+    )
+
+
+@mcp.tool()
+def set_device_options(label: str, options: dict, save: bool = True) -> dict:
+    """Set a Fortnite device's "User Options" at edit time.
+
+    Most settings that look Details-panel-only are writable this way. Two
+    things make them look read-only when they are not, and this tool exists so
+    neither has to be remembered:
+
+    - `set_user_option_value` is the *runtime* API. In the editor it needs a
+      live `PlayerController`, so it returns False and changes nothing --
+      which reads exactly like "not supported at edit time". The edit-time
+      path is `set_editor_property` with the option's exact key.
+    - the key is the literal User-Option string, case-sensitive and spaces
+      included ("Resize Time", "bLastStandingWins"). It gets none of the
+      CamelCase-to-snake_case conversion native properties get, and it is
+      absent from `dir()`.
+
+    Every key is read back after writing, and a key whose value is an
+    event-graph hookup is rejected rather than silently ignored. Get exact
+    key names from `get_device_options` first.
+
+    Args:
+        label: Editor label of the device actor.
+        options: `{exact User-Option key: value}`. Enums take their string
+            name, e.g. `{"Building Mode": "ALL"}`.
+        save: Save dirty packages afterwards. Pass False when configuring
+            many devices in a row, then call `save_level` at the end.
+    """
+    return get_bridge().exec_json(
+        _ACTOR_LOOKUP
+        + _READ_OPTION
+        + "if _actor is None:\n"
+        "    result = {'success': False, 'error': \"No actor with label '\" + _params['label'] + \"'\"}\n"
+        "else:\n"
+        "    _applied = []\n"
+        "    _rejected = []\n"
+        "    for _key, _want in _params['options'].items():\n"
+        "        _before = _read_option(_actor, _key)\n"
+        "        if 'error' in _before:\n"
+        "            _rejected.append({'key': _key, 'reason': 'No such option on this device. Check the exact key with get_device_options -- spaces and capitals are literal.'})\n"
+        "            continue\n"
+        "        if not _before.get('settable', False):\n"
+        "            _rejected.append({'key': _key, 'reason': _before.get('note', 'Not settable.')})\n"
+        "            continue\n"
+        "        try:\n"
+        # An enum property wants a member of its own type, so a string name is
+        # resolved against the value already sitting there.
+        "            if _before.get('enum_values') and isinstance(_want, str):\n"
+        "                _want = getattr(type(_actor.get_editor_property(_key)), _want.upper())\n"
+        "            _actor.set_editor_property(_key, _want)\n"
+        "        except Exception as _e:\n"
+        "            _rejected.append({'key': _key, 'reason': str(_e)})\n"
+        "            continue\n"
+        "        _after = _read_option(_actor, _key)\n"
+        "        _applied.append({'key': _key, 'was': _before.get('value'), 'now': _after.get('value')})\n"
+        "    _esu = unreal.EditorLoadingAndSavingUtils\n"
+        "    _dirty_before = len(_esu.get_dirty_map_packages())\n"
+        "    _dirty_after = None\n"
+        "    if _params.get('save', True):\n"
+        "        _esu.save_dirty_packages(True, True)\n"
+        "        _dirty_after = len(_esu.get_dirty_map_packages())\n"
+        "    result = {\n"
+        "        'success': not _rejected,\n"
+        "        'label': _actor.get_actor_label(),\n"
+        "        'applied': _applied,\n"
+        "        'rejected': _rejected,\n"
+        "        'dirty_packages_before_save': _dirty_before,\n"
+        "        'dirty_packages_after_save': _dirty_after,\n"
+        "    }\n",
+        label=label,
+        options=options,
+        save=save,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Verse
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def build_verse_code(
+    project_name: str, expect_classes: list[str], timeout: float = 180.0
+) -> dict:
+    """Compile the project's Verse code, by pressing UEFN's own Build shortcut.
+
+    Verse compilation has no scriptable trigger -- no `unreal` subsystem, no
+    build verb in Epic's Lore CLI. It was the one step in building a map that
+    always stopped and waited for a person, which mattered out of proportion
+    to its size: Verse is the only route to device-to-device event wiring, so
+    every wiring task inherited the wait. This presses `Ctrl+Shift+B` on the
+    editor window, exactly as a person would, then waits for the result.
+
+    The window is matched by its executable, not its title, and the keystroke
+    is not sent at all unless that window is genuinely in the foreground -- so
+    it cannot land somewhere it was not meant to. It does take focus briefly.
+
+    Confirmation is by looking for the classes in `expect_classes`, so **name
+    classes the build is supposed to create.** If they already exist, this
+    returns immediately having proved nothing, and says so in `verified`. To
+    confirm a rebuild that only changes an existing class's body, add a
+    throwaway `zz_probe_tag := class(tag){}` and expect that.
+
+    Args:
+        project_name: The UEFN project / content root, e.g. "SkyWars".
+        expect_classes: Verse class names that must load once the build is
+            done, e.g. `["starter_weapon1_tag"]`.
+        timeout: Seconds to wait for them to appear.
+    """
+    from .editor_ui import EditorWindowError
+    from .editor_ui import build_verse_code as _press
+
+    def _loaded() -> dict:
+        return get_bridge().exec_json(
+            "import unreal\n"
+            "result = {_n: unreal.load_object(None, '/' + _params['project_name'] + '/_Verse.' + _n) is not None"
+            " for _n in _params['names']}\n",
+            project_name=project_name,
+            names=expect_classes,
+        )
+
+    before = _loaded()
+    if all(before.values()):
+        return {
+            "success": True,
+            "verified": False,
+            "classes": before,
+            "note": (
+                "Every expected class already loaded, so no build was "
+                "triggered and nothing was proved. Name a class this build "
+                "should newly create."
+            ),
+        }
+    try:
+        window = _press()
+    except EditorWindowError as exc:
+        return {"success": False, "verified": False, "error": str(exc)}
+
+    started = time.monotonic()
+    while time.monotonic() - started < timeout:
+        time.sleep(3.0)
+        try:
+            now = _loaded()
+        except Exception:
+            # The editor stops answering while it compiles; that is the build
+            # running, not a failure.
+            continue
+        if all(now.values()):
+            return {
+                "success": True,
+                "verified": True,
+                "window": window,
+                "classes": now,
+                "waited_seconds": round(time.monotonic() - started, 1),
+            }
+    return {
+        "success": False,
+        "verified": True,
+        "window": window,
+        "error": (
+            f"The build was triggered but {expect_classes} did not all load "
+            f"within {timeout}s. Verse compile errors go to UEFN's own output "
+            "log, which is not readable from here -- check the editor."
+        ),
+    }
 
 
 # ---------------------------------------------------------------------------

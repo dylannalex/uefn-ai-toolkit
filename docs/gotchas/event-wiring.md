@@ -53,12 +53,29 @@ trigger.** Checked directly:
   build trigger (unsupported, likely fragile across UEFN versions, and it'd
   mean bypassing Epic's own tooling gate rather than using a public API).
 
-Practical result: writing the Verse device is fully doable headlessly (a
-text file); one human click (Build) is unavoidable; but everything after
-that — spawning the compiled device and binding its `@editable` properties
-— is `execute_python`-scriptable again, since `@editable` Verse properties
-are plain object-reference UPROPERTYs on the generated class, same as every
-other device's User Options ([user-options.md](user-options.md)).
+### The click is no longer human — `build_verse_code` presses it
+
+Everything above about the *API* still holds: no `unreal` subsystem builds
+Verse, and none of the routes investigated here turned out to exist. What
+changed is the conclusion drawn from it. The build has a public, documented
+gesture — `Ctrl+Shift+B` on the editor window — and the `build_verse_code`
+tool performs it, then confirms the result by waiting for a class the build
+was supposed to create. Measured at ~3 s on SkyWars.
+
+Two things make it safe to rely on rather than a blind poke: the window is
+located by its **executable**, not its title, and the keystroke is not sent
+at all unless that window is genuinely in the foreground; and the tool
+reports `verified: false` when the classes it was asked to look for already
+existed, rather than claiming a build it cannot prove. Compile *errors*
+still land only in UEFN's own output log, which is not readable from here —
+a build that fails shows up as the expected class never appearing.
+
+Practical result: writing the Verse device is doable headlessly (a text
+file), building it is now scriptable too, and everything after — spawning
+the compiled device and binding its `@editable` properties — was already
+`execute_python`-scriptable, since `@editable` Verse properties are plain
+object-reference UPROPERTYs on the generated class, same as every other
+device's User Options ([user-options.md](user-options.md)).
 
 **Item content specifically remains a confirmed dead end** even accounting
 for this: Epic's own `item_spawner_device` Verse API reference has no

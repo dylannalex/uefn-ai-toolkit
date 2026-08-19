@@ -42,7 +42,7 @@ The scope of that install is a separate question — currently project scope,
 hooks/hooks.json                 regenerates a content workspace's INDEX.md files
 scripts/reindex.py               generates every INDEX.md from frontmatter
 skills/                          uefn-knowledge, new-map-project
-src/uefn_mcp/                    the MCP server (three layers, below)
+src/uefn_mcp/                    the MCP server (layers, below)
 docs/                            assets/ how-to/ gotchas/ internals/
 tests/test_bridge.py             self-check, runs without an editor
 ```
@@ -63,7 +63,7 @@ a project loaded and Python remote execution enabled (below).
 
 ## Architecture
 
-Three layers in `src/uefn_mcp/`, each depending only on the one below:
+Four modules in `src/uefn_mcp/`, each depending only on the ones below:
 
 - **`remote_execution.py`** — vendored, unmodified copy of Epic's
   `PythonScriptRemoteExecution` client (see its `Copyright Epic Games`
@@ -83,6 +83,15 @@ Three layers in `src/uefn_mcp/`, each depending only on the one below:
   Each bridge reserves **its own command port**. Epic's client defaults every
   process to 6776 with `SO_REUSEADDR`, so two Claude Code sessions used to
   fight over one port until both died. Don't reintroduce a shared default.
+- **`editor_ui.py`** — the exception to all of the above: it does not talk
+  to the editor over the protocol at all, it presses keys on the editor's
+  *window*, with `ctypes` and Win32 only. It exists for one job, compiling
+  Verse, which has no scriptable trigger and used to be the one step that
+  stopped and waited for a person. Keep it to that: anything reachable
+  through `unreal.*` belongs in `server.py`, not here. The window is matched
+  by **executable**, never by title, and the keystroke is withheld unless
+  that window really is in the foreground — a wrong match means keys sent
+  somewhere they were not meant to go.
 - **`server.py`** — `MCPServer("uefn-mcp")` and the `@mcp.tool()` definitions.
   Every tool except `execute_python` builds a Python source string calling
   into `unreal.*` and hands it to `get_bridge().exec_json(...)`. Shared

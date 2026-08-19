@@ -37,6 +37,30 @@ def test_bridge_constructs_without_an_editor():
     assert bridge._remote_exec is None, "connecting must stay lazy"
 
 
+def test_editor_window_is_matched_by_executable():
+    """The window lookup decides where a keystroke lands. It must never
+    settle for a title match -- "Unreal Editor for Fortnite" is also a
+    substring of, say, an editor window open on this repository."""
+    if sys.platform != "win32":
+        print("skip (not Windows)", end=" ")
+        return
+    from uefn_mcp import editor_ui
+
+    try:
+        hwnd, _title = editor_ui.find_editor_window()
+    except editor_ui.EditorWindowError:
+        print("skip (no editor running)", end=" ")
+        return
+
+    import ctypes
+    from ctypes import wintypes
+
+    pid = wintypes.DWORD()
+    ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    image = editor_ui._process_image(pid.value)
+    assert image.endswith(editor_ui.UEFN_EXE), f"matched a non-UEFN window: {image}"
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_"):
