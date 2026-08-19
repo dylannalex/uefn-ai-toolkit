@@ -23,7 +23,7 @@ wrong map.
 | `state/` | **Current truth.** Rewritten in place, never grows. What is built, what is verified, what judgements stand. |
 | `pending_work/` | **Ephemeral.** One file per unfinished piece of work, including session handoffs. **Delete the file when the work is done** and record it in `build-log/`. |
 | `build-log/` | **Append-only.** One file per session. Never read start to finish — go through `INDEX.md` and open only what's relevant. |
-| `knowledge/` | **Buffer.** Fortnite facts discovered here that belong in the `uefn-mcp` plugin, staged for migration. |
+| `knowledge/` | **Buffer.** Fortnite facts discovered here that belong in the `uefn-ai-toolkit` plugin, staged for migration. |
 | `verse/` | **Generated mirror** of the Verse source in the UEFN project. Read-only — edit the original, never this copy. |
 
 Nothing belongs in two of them. If something feels like it fits in both

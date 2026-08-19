@@ -1,6 +1,6 @@
 ---
 name: uefn-knowledge
-description: The UEFN/Fortnite knowledge base behind uefn-mcp — validated asset and device class paths (with the confirmed-invalid ones), how-to recipes for scripting devices and Verse, and non-obvious unreal.* gotchas that silently corrupt work. Use before spawning or validating any Fortnite asset, before concluding a device setting or item content can't be scripted, before any bulk transform work, before wiring devices together, when a spawn/move/save appears to succeed but doesn't persist, or whenever a class path or asset needs to be discovered against a live editor.
+description: The UEFN/Fortnite knowledge base behind uefn-ai-toolkit — validated asset and device class paths (with the confirmed-invalid ones), how-to recipes for scripting devices and Verse, and non-obvious unreal.* gotchas that silently corrupt work. Use before spawning or validating any Fortnite asset, before concluding a device setting or item content can't be scripted, before any bulk transform work, before wiring devices together, when a spawn/move/save appears to succeed but doesn't persist, or whenever a class path or asset needs to be discovered against a live editor.
 ---
 
 # UEFN knowledge base

@@ -1,6 +1,6 @@
 {
-  "name": "uefn-mcp",
-  "displayName": "UEFN MCP",
+  "name": "uefn-ai-toolkit",
+  "displayName": "UEFN AI Toolkit",
   "version": "0.2.0",
   "description": "Build Fortnite maps in UEFN from Claude Code: an MCP server that drives a live editor over Python remote execution, plus a knowledge base of validated assets, device class paths and hard-won unreal.* gotchas.",
   "author": {

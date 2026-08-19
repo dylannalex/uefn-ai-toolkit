@@ -6,7 +6,7 @@
   },
   "plugins": [
     {
-      "name": "uefn-mcp",
+      "name": "uefn-ai-toolkit",
       "source": "./",
       "description": "Build Fortnite maps in UEFN from Claude Code, with a knowledge base of validated assets and editor-scripting gotchas."
     }

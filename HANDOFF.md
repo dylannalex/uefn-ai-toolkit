@@ -10,10 +10,19 @@ migration, not a permanent state of the repository.
 
 ## The one-line status
 
-The consolidation is **written and committed in both repositories, and
-verified only as far as it can be without a running UEFN editor and an
-installed plugin.** Nothing is pushed. Nothing is installed. No new tool has
-ever executed against a live editor.
+The consolidation is **written, committed and pushed in both repositories,
+and verified only as far as it can be without a running UEFN editor and an
+installed plugin.** Nothing is installed. No new tool has ever executed
+against a live editor.
+
+Since this was written: both repos were pushed on 2026-08-19, and this
+repository was renamed **`uefn-mcp` -> `uefn-ai-toolkit`** (repo, plugin and
+marketplace entry). The MCP server inside it is deliberately still `uefn-mcp`
+— see CLAUDE.md. The commit table below still says `uefn-mcp`; same repo.
+
+The two repositories live at `Root/repos/uefn-mcp` (the local folder still
+carries the old name; the remote is `dylannalex/uefn-ai-toolkit`) and
+`Root/repos/personal/fortnite-maps` — not side by side.
 
 ## What changed, and why
 
@@ -57,19 +66,20 @@ Commits, newest last:
 Nothing here has been exercised by Claude Code itself. The manifests are
 schema-valid JSON and that is **all** that has been checked.
 
-1. `git push` both repositories.
-2. `/plugin marketplace add dylannalex/uefn-mcp`
-3. `/plugin install uefn-mcp@dylannalex-uefn`
+1. ~~`git push` both repositories.~~ Done 2026-08-19 (`de9f141..6df0923`,
+   `63dd01d..a2219fc`).
+2. `/plugin marketplace add dylannalex/uefn-ai-toolkit`
+3. `/plugin install uefn-ai-toolkit@dylannalex-uefn`
 4. Start a **new session** (MCP servers only connect at session start) and
    confirm, in order:
    - the `uefn` tools are listed — i.e. `.mcp.json`'s
      `uv --directory ${CLAUDE_PLUGIN_ROOT} run uefn-mcp` actually resolves and
      `uv run` bootstraps its dependencies inside the plugin cache;
-   - `/uefn-mcp:uefn-knowledge` loads, **and the relative paths in its body
+   - `/uefn-ai-toolkit:uefn-knowledge` loads, **and the relative paths in its body
      resolve** — it routes with `../../docs/...` from the skill's own
      directory, which is the mechanism the whole knowledge base depends on and
      has never been tried;
-   - `/uefn-mcp:new-map-project` is offered.
+   - `/uefn-ai-toolkit:new-map-project` is offered.
 5. Open a session in `fortnite-maps`, edit any markdown file, and check the
    `PostToolUse` hook fired: `scripts/workspace_hook.py` should re-mirror the
    Verse source and regenerate the indexes. It has only ever been run by hand

@@ -1,4 +1,4 @@
-# uefn-mcp
+# uefn-ai-toolkit
 
 Build Fortnite maps by describing them to Claude, instead of clicking through
 the UEFN editor by hand.
@@ -18,8 +18,8 @@ which routes are dead ends that look promising.
 ## Install
 
 ```
-/plugin marketplace add dylannalex/uefn-mcp
-/plugin install uefn-mcp@dylannalex-uefn
+/plugin marketplace add dylannalex/uefn-ai-toolkit
+/plugin install uefn-ai-toolkit@dylannalex-uefn
 ```
 
 Then **start a new Claude Code session** — MCP servers only connect at

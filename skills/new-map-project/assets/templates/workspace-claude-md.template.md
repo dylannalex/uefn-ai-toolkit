@@ -3,7 +3,7 @@
 Map projects built in UEFN with Claude Code, one subfolder per map.
 
 This repository is **content, not framework**. It holds no skills, scripts or
-templates — those live in the `uefn-mcp` plugin, installed once at user scope
+templates — those live in the `uefn-ai-toolkit` plugin, installed once at user scope
 and reachable from here without anything being copied in. Ask for the
 `uefn-knowledge` skill for validated asset paths, device class paths and
 `unreal.*` gotchas; they are deliberately not duplicated here.

@@ -6,8 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Claude Code **plugin** that lets a session build Fortnite maps inside UEFN
-(Unreal Editor for Fortnite). It bundles three things that are useless apart:
+A Claude Code **plugin**, `uefn-ai-toolkit`, that lets a session build Fortnite
+maps inside UEFN (Unreal Editor for Fortnite). It bundles three things that
+are useless apart:
 
 - an **MCP server** (`src/uefn_mcp/`) that drives a running editor via Epic's
   Python Editor Script Plugin remote execution protocol (UDP discovery + TCP
@@ -17,6 +18,11 @@ A Claude Code **plugin** that lets a session build Fortnite maps inside UEFN
   and `new-map-project` (scaffolds a map's notes folder);
 - a **knowledge base** (`docs/`) of validated asset paths, device class paths
   and `unreal.*` gotchas, all established against a live editor.
+
+The plugin is `uefn-ai-toolkit`; the MCP server inside it is still `uefn-mcp`
+(Python package `uefn_mcp`, console script `uefn-mcp`, `MCPServer("uefn-mcp")`,
+and the `uefn-mcp.exe` you see in the process list). That split is deliberate —
+the plugin is more than its server. Don't "fix" it.
 
 A map's own notes live in a separate **content workspace** — a plain git
 repository the user owns, one folder per map. Nothing from this repository is
@@ -48,8 +54,8 @@ python tests/test_bridge.py # self-check that needs no editor
 python scripts/reindex.py docs
 ```
 
-Installed by users as a plugin (`/plugin marketplace add dylannalex/uefn-mcp`,
-then `/plugin install uefn-mcp@dylannalex-uefn`). There is no lint or
+Installed by users as a plugin (`/plugin marketplace add dylannalex/uefn-ai-toolkit`,
+then `/plugin install uefn-ai-toolkit@dylannalex-uefn`). There is no lint or
 type-check config. To exercise the server end to end, UEFN must be open with
 a project loaded and Python remote execution enabled (below).
 
