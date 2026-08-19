@@ -10,6 +10,7 @@ and Python enabled for that project.
 from __future__ import annotations
 
 import json
+import os
 import socket
 import threading
 import time
@@ -19,6 +20,15 @@ from . import remote_execution as re
 
 RESULT_START = "@@UEFN_MCP_RESULT_START@@"
 RESULT_END = "@@UEFN_MCP_RESULT_END@@"
+
+# How long to wait for the editor to answer one command. Epic's client sets no
+# receive timeout at all, so when the editor dies mid-call (a GPU crash leaves
+# the process alive writing a dump, holding the socket open) recv() blocks for
+# as long as that process lingers - measured at eleven minutes, in silence,
+# during a 36-actor build. Longest legitimate call measured is 4.5 s, except a
+# Verse compile, during which the editor stops answering entirely; raise this
+# if a compile on this machine outlasts it.
+COMMAND_TIMEOUT = float(os.environ.get("UEFN_MCP_COMMAND_TIMEOUT", "120"))
 
 
 class UEFNConnectionError(RuntimeError):
@@ -48,10 +58,15 @@ def _free_port() -> int:
 class UEFNBridge:
     """Thread-safe wrapper around a single remote execution command connection."""
 
-    def __init__(self, discovery_timeout: float = 5.0) -> None:
+    def __init__(
+        self,
+        discovery_timeout: float = 5.0,
+        command_timeout: float = COMMAND_TIMEOUT,
+    ) -> None:
         self._lock = threading.RLock()
         self._remote_exec: re.RemoteExecution | None = None
         self._discovery_timeout = discovery_timeout
+        self._command_timeout = command_timeout
 
     def connect(self) -> dict:
         """(Re)establish a command connection to the first discovered editor node."""
@@ -92,6 +107,12 @@ class UEFNBridge:
                     "the loopback callback. Do not kill the editor - retrying once it "
                     "is idle is usually enough."
                 ) from exc
+            # Bound the receive here rather than in remote_execution.py, which
+            # stays a drop-in copy of Epic's client.
+            conn = getattr(self._remote_exec, "_command_connection", None)
+            sock = getattr(conn, "_command_channel_socket", None)
+            if sock is not None:
+                sock.settimeout(self._command_timeout)
             return node
 
     def disconnect(self) -> None:
@@ -119,10 +140,26 @@ class UEFNBridge:
         """Run `code` in the editor and return the raw command_result dict."""
         with self._lock:
             self._ensure_connected()
+            started = time.monotonic()
             try:
                 return self._remote_exec.run_command(
                     code, unattended=unattended, exec_mode=exec_mode
                 )
+            except TimeoutError as exc:
+                # The editor took the command and never answered. Do NOT retry:
+                # the command may well have run, and re-running a create or a
+                # transform duplicates work. Fail now and let the caller resume
+                # from its own log - the batch scripts are idempotent by label.
+                self._teardown()
+                raise UEFNConnectionError(
+                    f"UEFN accepted the command but sent no result within "
+                    f"{time.monotonic() - started:.0f}s. It is compiling Verse, "
+                    "blocked on a modal dialog, or dead (a GPU crash leaves the "
+                    "process alive holding the socket).\n"
+                    "The command was NOT retried, because it may already have "
+                    "taken effect. Check the editor, then resume from the last "
+                    "step your own log recorded as finished."
+                ) from exc
             except (OSError, RuntimeError) as first:
                 # The connection went stale (e.g. the editor was restarted).
                 # has_command_connection() only checks the object exists, never

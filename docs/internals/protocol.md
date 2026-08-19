@@ -79,6 +79,17 @@ sequenceDiagram
     E-->>C: command_result {success, result, output[]}
 ```
 
+**That round-trip has a deadline.** Epic's client sets no receive timeout, so
+if the editor takes the command and never answers -- a GPU crash leaves the
+process alive holding the socket open -- `recv()` blocks for as long as that
+process lingers (measured: eleven silent minutes, mid-batch). `bridge.py` sets
+a `COMMAND_TIMEOUT` (120s, `UEFN_MCP_COMMAND_TIMEOUT` to override) on the
+channel socket after the handshake and raises `UEFNConnectionError` when it
+expires. It does **not** retry that command: the editor may have run it, and
+re-running a create or a transform duplicates work. Resume from your own
+per-step log instead. A Verse compile is the one legitimate reason the editor
+goes quiet for a long time -- raise the timeout if a compile here outlasts it.
+
 `exec_mode` is one of:
 
 - **`ExecuteFile`** (default, used for everything except `execute_python`'s `statement`/`eval` modes) — runs the source as a full script, so it can contain multiple statements, imports, function defs, etc.

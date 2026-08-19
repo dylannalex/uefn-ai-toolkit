@@ -11,7 +11,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from uefn_mcp import remote_execution as re  # noqa: E402
-from uefn_mcp.bridge import UEFNBridge, _free_port  # noqa: E402
+from uefn_mcp.bridge import (  # noqa: E402
+    UEFNBridge,
+    UEFNConnectionError,
+    _free_port,
+)
 
 
 def test_free_port_is_actually_bindable():
@@ -35,6 +39,45 @@ def test_no_bridge_uses_epics_shared_default():
 def test_bridge_constructs_without_an_editor():
     bridge = UEFNBridge()
     assert bridge._remote_exec is None, "connecting must stay lazy"
+
+
+def test_a_silent_editor_fails_fast_and_is_not_retried():
+    """A command the editor never answers must raise, not re-run. Re-running a
+    create or a transform duplicates work, and the eleven-minute silence this
+    replaced is what made a crashed batch unresumable."""
+
+    class SilentEditor:
+        calls = 0
+
+        def has_command_connection(self):
+            return True
+
+        def run_command(self, *_a, **_kw):
+            SilentEditor.calls += 1
+            raise TimeoutError("timed out")
+
+        def stop(self):
+            pass
+
+    bridge = UEFNBridge(command_timeout=0.1)
+    bridge._remote_exec = SilentEditor()
+    try:
+        bridge.exec_raw("pass")
+    except UEFNConnectionError as exc:
+        assert "NOT retried" in str(exc), exc
+    else:
+        raise AssertionError("a silent editor did not raise")
+    assert SilentEditor.calls == 1, f"command was re-run {SilentEditor.calls} times"
+
+
+def test_the_vendored_socket_is_still_reachable_to_bound():
+    """connect() reaches into Epic's client to set the receive timeout it never
+    sets itself. If Epic renames either attribute, the bound silently stops
+    being applied and the silence comes back."""
+    config = re.RemoteExecutionConfig()
+    assert "_command_connection" in vars(re.RemoteExecution(config))
+    conn = re._RemoteExecutionCommandConnection(config, "node", "remote")
+    assert hasattr(conn, "_command_channel_socket")
 
 
 def test_editor_window_is_matched_by_executable():
