@@ -105,6 +105,29 @@ This runs the *same* validators the editor's Message Log uses (including `FortVa
 - The pickup mesh on the chest/pad updates immediately in the viewport, a quick visual sanity check.
 - **Survives a real editor close/reopen** — confirmed empirically, unlike a similar-looking `FortPickupCreative` approach that looked identical at this stage but silently failed on reload — see [gotchas/item-content/04-live-session-and-fortpickupcreative.md](../gotchas/item-content/04-live-session-and-fortpickupcreative.md).
 
+## Granting an item without showing a pad
+
+An Item Spawner is a *visible* device: it draws a floating base wherever it
+stands. That matters because the only scriptable way to hand a player an
+arbitrary item is to teleport a pre-loaded spawner to them and fire it
+(Item Granter's content cannot be written — see
+[../gotchas/item-content/overview.md](../gotchas/item-content/overview.md)),
+and a pad appearing under the player is not what "grant an item" is supposed
+to look like.
+
+Two user options make that pattern invisible, both plain booleans and both
+writable with `set_device_options`:
+
+| Option | Set to | Why |
+|---|---|---|
+| `Base Visible During Game` | `False` | Hides the pad. The item still spawns and is still collectable — only the base mesh goes |
+| `Run Over Pickup` | `True` | Collection happens on overlap, so the player never has to press anything |
+
+With both set, teleport the spawner to the player's **feet** —
+`Character.GetTransform().Translation`, not `GetViewLocation()`, which is the
+camera and sits outside the capsule the overlap needs — fire it, and send it
+home. SkyWars runs 60 spawners this way.
+
 ## What this means for workarounds, and what's not done yet
 
 A manual "Details-panel item assignment sheet" (e.g. `personal/fortnite-maps/SkyWars/docs/manual-assignment-sheet.md`) can drop the manual pass **for its Item Spawner instances** and script the assignments directly; Item Granter entries in that sheet still need the live-session workaround. The `set_item_spawner_content` tool does this now, so the snippet above is reference rather than something to paste — see [../gotchas/item-content/overview.md](../gotchas/item-content/overview.md) for the full "what's left" status.
