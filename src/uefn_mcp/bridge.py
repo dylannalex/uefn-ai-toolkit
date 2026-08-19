@@ -55,6 +55,72 @@ def _free_port() -> int:
         return probe.getsockname()[1]
 
 
+def _join_group_on_every_interface(sock: socket.socket, group: str) -> None:
+    """Receive the editor's pong whichever interface it answers on.
+
+    Epic's client binds the discovery socket to one address and joins the
+    multicast group on that same address. Two things go wrong with that on
+    Windows: a socket bound to a specific unicast address receives no
+    multicast at all, and binding the wildcard joins only the OS's default
+    multicast interface - which is whatever adapter has the lowest metric,
+    a VPN adapter as often as not. The editor answers on the interface *it*
+    picked (observed: the Wi-Fi address, while its own config said 127.0.0.1),
+    so bind the wildcard and join everywhere instead of guessing.
+
+    Failures are ignored on purpose: a join that is already in place, or an
+    adapter that cannot carry multicast, is not a reason to have no bridge.
+    """
+    addresses = {"127.0.0.1"}
+    try:
+        addresses |= set(socket.gethostbyname_ex(socket.gethostname())[2])
+    except OSError:
+        pass
+    for address in addresses:
+        try:
+            sock.setsockopt(
+                socket.IPPROTO_IP,
+                socket.IP_ADD_MEMBERSHIP,
+                socket.inet_aton(group) + socket.inet_aton(address),
+            )
+        except OSError:
+            pass
+
+
+def _also_reach_the_editor_directly(remote_exec: re.RemoteExecution, port: int) -> None:
+    """Send every discovery message to the local editor by unicast as well.
+
+    Measured on 2026-08-19 against a live UEFN: a ping multicast to
+    239.0.0.1:6766 got **zero** pongs, the identical ping sent to
+    127.0.0.1:6766 got one every time - and the editor answered *to the
+    group*, from the Wi-Fi address. The editor's multicast receive is the
+    half that breaks. Epic's client only ever multicasts, so it goes silent,
+    indistinguishable from an editor with Python switched off - which is what
+    makes people restart UEFN for nothing.
+
+    Wrapping `_broadcast_message` rather than adding one unicast ping covers
+    `open_connection` and `close_connection` too, including the six retries
+    inside the vendored `_try_accept`: discovery finding the editor and then
+    the handshake timing out is the same fault one message later.
+
+    The editor is always on this machine (the command channel is
+    localhost-only), so the unicast twin is always meaningful, and a node
+    that hears both sides ignores the duplicate.
+    """
+    connection = remote_exec._broadcast_connection
+    multicast_only = connection._broadcast_message
+
+    def broadcast_and_unicast(message):
+        multicast_only(message)
+        try:
+            connection._broadcast_socket.sendto(
+                message.to_json_bytes(), ("127.0.0.1", port)
+            )
+        except OSError:
+            pass  # multicast may still carry it; connect() reports the real failure
+
+    connection._broadcast_message = broadcast_and_unicast
+
+
 class UEFNBridge:
     """Thread-safe wrapper around a single remote execution command connection."""
 
@@ -74,8 +140,18 @@ class UEFNBridge:
             self._teardown()
             config = re.RemoteExecutionConfig()
             config.command_endpoint = ("127.0.0.1", _free_port())
+            # Wildcard bind, then join on every interface - see
+            # _join_group_on_every_interface. Epic's 127.0.0.1 default hears
+            # nothing when the editor answers on another adapter.
+            config.multicast_bind_address = "0.0.0.0"
             self._remote_exec = re.RemoteExecution(config)
             self._remote_exec.start()
+            port = config.multicast_group_endpoint[1]
+            _join_group_on_every_interface(
+                self._remote_exec._broadcast_connection._broadcast_socket,
+                config.multicast_group_endpoint[0],
+            )
+            _also_reach_the_editor_directly(self._remote_exec, port)
             deadline = time.time() + self._discovery_timeout
             node = None
             while time.time() < deadline:

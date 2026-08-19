@@ -64,7 +64,7 @@ What *does* matter is **scope** — where that registration itself gets stored, 
 | `user` (`-s user`) | `~/.claude.json`, top-level, not tied to a project | you start Claude Code from anywhere |
 | `project` (`-s project`) | `.mcp.json` checked into the repo | anyone with the repo, from that folder |
 
-Install the plugin at **user** scope, not project scope. A session working in a map's own notes repository still has to reach the `uefn` tools, and a project-scoped install would only be visible inside this repository — which is not where map building happens.
+Scope decides which sessions see the tools. The plugin is currently declared at **project** scope in the map content workspace — deliberately, so it does not load in unrelated projects. What matters either way is that the scope covers the folder where map building actually happens, not this repository.
 
 MCP servers are only started when a Claude Code **session starts** — adding or changing a registration never affects a session already in progress. That's the second restart: not UEFN this time, but Claude Code itself.
 
@@ -91,3 +91,16 @@ sequenceDiagram
     UEFN-->>Claude: connected: true, project/level info
     Claude-->>You: "connected, ready to build"
 ```
+
+## When restarting UEFN is *not* the answer
+
+A restart costs minutes, and only one thing on this page actually requires one.
+
+| Symptom | Restart? |
+|---|---|
+| `setup_uefn_project` just changed the `.uefnproject` or the ini | **Yes.** Both files are read only at editor startup. Once per project |
+| Python Scripting was toggled by hand while the editor was open | **Yes**, same reason |
+| No editor discovered / the handshake times out | **No.** That was usually the client's multicast blind spot, fixed in `bridge.py` — see [protocol.md](protocol.md). Retry the call |
+| A tool call failed once, or the bridge reported a timeout | **No.** Reconnecting is a call, not a restart. A timeout means the editor was busy or unwell, not that its Python is off |
+| Verifying that a transform really persisted | **No**, if the move went through `set_actor_transform`. It calls `modify()` and saves, and the dirty count around the save is the check — see [../gotchas/transform-persistence.md](../gotchas/transform-persistence.md). The restart was only ever a proxy for "did this reach disk" |
+| The editor is mid-crash-dump (`GPU Crash dump Triggered`) | **Yes** — but that is a dead editor, not a setup problem |

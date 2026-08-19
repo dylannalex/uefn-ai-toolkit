@@ -49,26 +49,38 @@ validates, `uv` bootstraps the server inside the plugin cache, the console
 script starts, the self-check passes there, and all 15 `../../docs/...` routes
 in `uefn-knowledge/SKILL.md` resolve from the installed skill directory.
 
-### 0b. The bridge's eleven-minute silence — fixed, needs one live check
+### 0b. The bridge — both faults fixed and verified against a live editor
 
-The silence was Epic's client setting **no receive timeout at all**: a GPU
-crash leaves UEFN.exe alive holding the socket, so `recv()` blocked for as long
-as that process lingered. `bridge.py` now sets `COMMAND_TIMEOUT` (120 s,
-`UEFN_MCP_COMMAND_TIMEOUT` to override) on the channel socket after the
-handshake, and on expiry raises `UEFNConnectionError` **without retrying the
-command** — it may already have taken effect, and re-running a create or a
-transform duplicates work. Resume from the per-step log instead.
-`tests/test_bridge.py` covers both halves; `python tests/test_bridge.py` passes.
+**The eleven-minute silence.** It was never the retry loop: Epic's client sets
+no receive timeout at all, so a GPU crash leaving UEFN.exe alive holding the
+socket blocked `recv()` for as long as that process lingered. `bridge.py` now
+bounds it with `COMMAND_TIMEOUT` (120 s, `UEFN_MCP_COMMAND_TIMEOUT` to
+override) and does **not** retry on expiry — the command may already have taken
+effect. Measured live: raised in 3.2 s with a 3 s bound, and the next call
+after it succeeded.
 
-**Not yet exercised against a live editor** — UEFN was not running. Two things
-to watch when it next is:
+**Discovery was blind, and that is what all the "restart UEFN" advice was.**
+Same day, editor up and healthy, project loaded, Python on, port bound — and
+nothing discovered. Measured: a ping multicast to 239.0.0.1:6766 got **zero**
+pongs in eight seconds; the identical ping to `127.0.0.1:6766` got one every
+time, answered *to the group* from the Wi-Fi address, not loopback, despite the
+project ini saying `127.0.0.1`. Two fixes, both in `bridge.py`, none in the
+vendored client: unicast every discovery message as well as multicasting it
+(covering `open_connection`, or the handshake times out one message later), and
+bind the wildcard while joining the group on every interface. Full detail in
+`docs/internals/protocol.md`; the restart-or-not table is in `setup.md`.
 
-- a normal call still returns (the `settimeout` reaches the real socket — the
-  test only proves the two vendored attribute names still exist);
-- `build_verse_code` still compiles. The editor stops answering during a
-  compile, which now surfaces as a timeout after 120 s instead of a long block.
-  Its poll loop swallows that and reconnects, but if a compile on this machine
-  outlasts 120 s the cost is a needless reconnect per poll — raise the env var.
+Verified end to end after the fix, without restarting UEFN: connected,
+`{'level': 'SkyWars'}` in 0.44 s, socket timeout 120 s where it belongs.
+
+**A running session does not have this yet.** The venv holds the package
+editable, so the fix reaches a session at its *next start* — restart Claude
+Code in `fortnite-maps`, not the editor.
+
+Still unexercised: `build_verse_code` under the new timeout. The risk it was
+flagged for is now covered from the other side — a long unanswered call raises
+and the next call reconnects cleanly, which is exactly what its poll loop
+needs — but nobody has watched an actual compile since.
 
 ### 0c. Then: SkyWars needs a real match
 

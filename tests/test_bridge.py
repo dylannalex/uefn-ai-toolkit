@@ -14,6 +14,7 @@ from uefn_mcp import remote_execution as re  # noqa: E402
 from uefn_mcp.bridge import (  # noqa: E402
     UEFNBridge,
     UEFNConnectionError,
+    _also_reach_the_editor_directly,
     _free_port,
 )
 
@@ -39,6 +40,48 @@ def test_no_bridge_uses_epics_shared_default():
 def test_bridge_constructs_without_an_editor():
     bridge = UEFNBridge()
     assert bridge._remote_exec is None, "connecting must stay lazy"
+
+
+def test_every_discovery_message_also_goes_out_by_unicast():
+    """A live UEFN answered unicast pings and ignored multicast ones entirely.
+    The unicast twin has to cover open_connection too, or discovery finds the
+    editor and the handshake then times out one message later."""
+
+    class FakeSocket:
+        def __init__(self):
+            self.sent = []
+
+        def sendto(self, payload, address):
+            self.sent.append((payload, address))
+
+    class FakeRemoteExec:
+        def __init__(self):
+            self._broadcast_connection = self
+            self._broadcast_socket = FakeSocket()
+            self.multicast = []
+            self._node_id = "node"
+            self._config = re.RemoteExecutionConfig()
+
+        def _broadcast_message(self, message):
+            self.multicast.append(message.type_)
+
+    fake = FakeRemoteExec()
+    _also_reach_the_editor_directly(fake, 6766)
+    # the real vendored funnel: if Epic ever stops routing these through
+    # _broadcast_message, the unicast twin silently stops covering them
+    connection = re._RemoteExecutionBroadcastConnection(re.RemoteExecutionConfig(), "node")
+    connection._broadcast_message = fake._broadcast_message
+    connection._broadcast_socket = fake._broadcast_socket
+    connection._last_ping = None
+    connection._broadcast_ping()
+    connection.broadcast_open_connection("remote")
+    connection.broadcast_close_connection("remote")
+
+    assert fake.multicast == ["ping", "open_connection", "close_connection"], fake.multicast
+    assert len(fake._broadcast_socket.sent) == 3, fake._broadcast_socket.sent
+    for payload, address in fake._broadcast_socket.sent:
+        assert address == ("127.0.0.1", 6766), address
+        assert b'"magic": "ue_py"' in payload or b'"magic":"ue_py"' in payload, payload
 
 
 def test_a_silent_editor_fails_fast_and_is_not_retried():

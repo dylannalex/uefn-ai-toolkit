@@ -30,6 +30,27 @@ Every message on both channels is UTF-8 JSON with a common envelope:
 
 `uefn-mcp` and the UEFN editor both join the same UDP multicast group (`239.0.0.1:6766` by default — must match the project's `RemoteExecutionMulticastGroupEndpoint` setting). `uefn-mcp` broadcasts a `ping` once a second; every listening editor instance replies with a `pong` carrying its node ID. `uefn-mcp` (via `UEFNBridge.connect()`) waits up to 5 seconds and then picks the first node it heard from — if two UEFN instances are open, whichever answers first wins.
 
+**Multicast alone does not reliably reach the editor, and `bridge.py` no longer
+relies on it.** Measured against a live UEFN on 2026-08-19: a ping multicast to
+239.0.0.1:6766 got **zero** pongs over eight seconds, while the identical ping
+sent to `127.0.0.1:6766` got one every time — and the editor answered *to the
+group*, sourced from the machine's Wi-Fi address, not loopback, despite its own
+`RemoteExecutionMulticastBindAddress=127.0.0.1`. So two independent things had
+to change, both in `bridge.py`, neither in the vendored client:
+
+- **Send every discovery message unicast as well** (`_also_reach_the_editor_directly`
+  wraps `_broadcast_message`). It covers `open_connection` too — with only the
+  ping fixed, discovery finds the editor and then the TCP handshake times out
+  one message later, which looks like a completely different bug.
+- **Bind the wildcard and join the group on every interface**
+  (`_join_group_on_every_interface`). A socket bound to one address receives no
+  multicast on Windows, and binding `0.0.0.0` joins only the OS's default
+  multicast interface — a VPN adapter, on the machine where this was found.
+
+This matters out of proportion to its size: a silent discovery is
+indistinguishable from an editor with Python switched off, so the standing
+advice was to restart UEFN — three minutes, for a client-side blind spot.
+
 ```mermaid
 sequenceDiagram
     participant C as uefn-mcp
