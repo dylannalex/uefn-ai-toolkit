@@ -141,11 +141,25 @@ session anyway: `uefn-mcp.exe` lives in the cache's `.venv` and a running
 server holds it (`EACCES … rm`). The junction removes the copy, so there is
 nothing to keep in sync and no hook to write.
 
+**How an edit reaches a session.** Nothing on disk is ever stale, so the only
+question is when Claude Code re-reads it. `docs/` is immediate and needs no
+restart — the knowledge skill opens the file at the moment it routes there.
+`skills/`, `hooks/hooks.json` and `.mcp.json` are read at session start.
+`src/uefn_mcp/` is also just a restart: the venv holds the package
+**editable** (a `.pth` pointing at `src/`), and `uv run` rebuilds by itself
+when it needs to — it silently repaired a `.pth` still aimed at the
+pre-rename `repos/uefn-mcp/src`. Restarting the session is the whole update
+mechanism; there is no install step.
+
 **What breaks it:** any `claude plugin install` / `update` for this plugin
 replaces the junction with a fresh copy. Symptom — edits stop showing up in a
-new session. Fix — re-run the two lines above. Editing is otherwise free;
-Claude Code only re-reads a plugin at session start, so a restart is still
-needed to see a change.
+new session. Fix — re-run the two lines above.
+
+Note the trap that leads there: **bumping `version` in `plugin.json` is what
+arms `claude plugin update`.** The bump alone is harmless — the loader
+resolves by `installPath`, so `claude plugin list` keeps reporting 0.2.0 and
+keeps loading. But a later `update` then sees a genuinely newer version,
+reinstalls, and the junction is gone.
 
 **Before publishing:** push, delete `settings.local.json`, and reinstall
 normally. The tracked `settings.json` is already in the published shape.
