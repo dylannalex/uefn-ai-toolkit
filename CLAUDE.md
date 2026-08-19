@@ -26,10 +26,12 @@ the plugin is more than its server. Don't "fix" it.
 
 A map's own notes live in a separate **content workspace** — a plain git
 repository the user owns, one folder per map. Nothing from this repository is
-ever copied into it: the plugin installs once at user scope and is reachable
-from any working directory. That matters historically, because the previous
-design *did* copy its skills into each workspace, and every copy became a
-fork that could not receive an update.
+ever copied into it: the workspace only *declares* the plugin, in its
+`.claude/settings.json`, and Claude Code installs it once. That matters
+historically, because the previous design *did* copy its skills into each
+workspace, and every copy became a fork that could not receive an update.
+The scope of that install is a separate question — currently project scope,
+`fortnite-maps` only; see HANDOFF.md 0a-bis for the development setup.
 
 ## Layout
 

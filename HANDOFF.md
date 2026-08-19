@@ -63,7 +63,9 @@ Commits, newest last:
 
 ### 0a. Push, install, and find out what breaks — done 2026-08-19
 
-The plugin is **installed at user scope from the GitHub remote**. It did break
+The plugin is **installed and loading**. It was first installed at user scope
+from the GitHub remote, which is how the failure below surfaced; it has since
+been moved to the `fortnite-maps` workspace only — see 0a-bis. It did break
 once, exactly as this list hoped: `claude plugin list` reported
 `✘ failed to load` because `plugin.json` declared `"hooks": "./hooks/hooks.json"`,
 a path the loader already picks up by convention — the manifest may only name
@@ -76,8 +78,8 @@ both before and after. `claude plugin list` is the check that matters.
    `claude plugin marketplace add` — cloned over SSH, marketplace validated.
    `"source": "./"` (a repo acting as its own marketplace) **works against a
    real install**; that suspicion is closed.
-3. ~~`/plugin install uefn-ai-toolkit@dylannalex-uefn`~~ Done. Installed to
-   `~/.claude/plugins/cache/dylannalex-uefn/uefn-ai-toolkit/0.2.0`. Installing
+3. ~~`/plugin install uefn-ai-toolkit@dylannalex-uefn`~~ Done (at the time, user
+   scope; now project scope in `fortnite-maps`). Installing
    is not loading: it reported success while the plugin was still failing to
    load. Always follow an install with `claude plugin list`.
 4. Verified directly against the installed cache, without waiting for a session:
@@ -104,6 +106,49 @@ skill's paths resolve. One thing to glance at: `plugin.json` still declares
 `mcpServers` and `skills`, both also conventional locations. They provoke no
 error, but if the `uefn` tools ever show up **twice**, that is the first place
 to look.
+
+### 0a-bis. How this is installed while it is being developed
+
+Not at user scope. The plugin is declared **only in the `fortnite-maps`
+workspace**, and it reads **straight out of this working tree** — no copy, no
+reinstall step, no push.
+
+Three pieces, and the third is the one that is easy to lose:
+
+1. `fortnite-maps/.claude/settings.json` (tracked) enables
+   `uefn-ai-toolkit@dylannalex-uefn` from the **github** source. That is the
+   portable declaration: it is what a fresh clone gets, and it is what will be
+   right once this repo is pushed.
+2. `fortnite-maps/.claude/settings.local.json` (gitignored) overrides the same
+   marketplace name with `{"source": "directory", "path": "…/uefn-ai-toolkit"}`.
+   Machine-specific, so it must never reach the tracked file — that is the whole
+   reason the override lives in local scope.
+3. `~/.claude/plugins/cache/dylannalex-uefn/uefn-ai-toolkit/0.2.0` is a
+   **Windows junction to this repository**, not a directory:
+
+   ```powershell
+   $link = "$env:USERPROFILE\.claude\plugins\cache\dylannalex-uefn\uefn-ai-toolkit\0.2.0"
+   Remove-Item -Recurse -Force $link
+   New-Item -ItemType Junction -Path $link -Target "C:\Users\tinte\Root\repos\uefn-ai-toolkit"
+   ```
+
+**Why the junction, rather than a hook that re-syncs on every edit.** A
+`directory` marketplace still *copies* into the cache, and neither
+`claude plugin update` nor `claude plugin marketplace update` re-copies it —
+both compare `version` in `plugin.json`, see 0.2.0 on each side and decline.
+The only real re-sync is uninstall + install, which cannot run during a
+session anyway: `uefn-mcp.exe` lives in the cache's `.venv` and a running
+server holds it (`EACCES … rm`). The junction removes the copy, so there is
+nothing to keep in sync and no hook to write.
+
+**What breaks it:** any `claude plugin install` / `update` for this plugin
+replaces the junction with a fresh copy. Symptom — edits stop showing up in a
+new session. Fix — re-run the two lines above. Editing is otherwise free;
+Claude Code only re-reads a plugin at session start, so a restart is still
+needed to see a change.
+
+**Before publishing:** push, delete `settings.local.json`, and reinstall
+normally. The tracked `settings.json` is already in the published shape.
 
 ### 0b. Exercise every new tool against a live editor — none has ever run
 
