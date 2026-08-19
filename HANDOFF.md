@@ -63,8 +63,13 @@ Commits, newest last:
 
 ### 0a. Push, install, and find out what breaks — done 2026-08-19
 
-The plugin is **installed at user scope from the GitHub remote** and everything
-that can be checked outside a fresh session has been checked and passes.
+The plugin is **installed at user scope from the GitHub remote**. It did break
+once, exactly as this list hoped: `claude plugin list` reported
+`✘ failed to load` because `plugin.json` declared `"hooks": "./hooks/hooks.json"`,
+a path the loader already picks up by convention — the manifest may only name
+*additional* hook files. Dropping that one key fixed it; the plugin now reports
+`✔ enabled`. **`claude plugin validate` does not catch this** — it passed clean
+both before and after. `claude plugin list` is the check that matters.
 
 1. ~~`git push` both repositories.~~ Done (`de9f141..6df0923`, `63dd01d..a2219fc`).
 2. ~~`/plugin marketplace add dylannalex/uefn-ai-toolkit`~~ Done via
@@ -72,7 +77,9 @@ that can be checked outside a fresh session has been checked and passes.
    `"source": "./"` (a repo acting as its own marketplace) **works against a
    real install**; that suspicion is closed.
 3. ~~`/plugin install uefn-ai-toolkit@dylannalex-uefn`~~ Done. Installed to
-   `~/.claude/plugins/cache/dylannalex-uefn/uefn-ai-toolkit/0.2.0`.
+   `~/.claude/plugins/cache/dylannalex-uefn/uefn-ai-toolkit/0.2.0`. Installing
+   is not loading: it reported success while the plugin was still failing to
+   load. Always follow an install with `claude plugin list`.
 4. Verified directly against the installed cache, without waiting for a session:
    - `uv --directory <cache> run uefn-mcp` **resolves and bootstraps** — uv built
      the package and installed 39 deps into a `.venv` inside the plugin cache;
@@ -82,7 +89,8 @@ that can be checked outside a fresh session has been checked and passes.
      the installed skill directory**. The mechanism the whole knowledge base
      depends on is sound.
    - `claude plugin validate .` passes clean (the missing
-     `metadata.description` it warned about was added).
+     `metadata.description` it warned about was added), and `claude plugin list`
+     now reports the plugin `✔ enabled`.
 5. ~~Workspace hook.~~ Run from the **installed** plugin path: the guard no-ops
    in an unrelated repo, and against `fortnite-maps` it mirrored 4 Verse files
    out of the UEFN project and regenerated the indexes with 0 changes —
@@ -91,7 +99,11 @@ that can be checked outside a fresh session has been checked and passes.
 **Left for a fresh session — the only two things a restart can show:** that the
 `uefn` MCP tools appear in the tool list, and that
 `/uefn-ai-toolkit:uefn-knowledge` and `/uefn-ai-toolkit:new-map-project` are
-offered. Both are now low-risk: the server runs and the skill's paths resolve.
+offered. Both are now low-risk: the plugin loads, the server runs and the
+skill's paths resolve. One thing to glance at: `plugin.json` still declares
+`mcpServers` and `skills`, both also conventional locations. They provoke no
+error, but if the `uefn` tools ever show up **twice**, that is the first place
+to look.
 
 ### 0b. Exercise every new tool against a live editor — none has ever run
 
