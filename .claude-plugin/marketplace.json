@@ -4,6 +4,9 @@
     "name": "dylannalex",
     "url": "https://github.com/dylannalex"
   },
+  "metadata": {
+    "description": "The UEFN AI Toolkit: drive a live Unreal Editor for Fortnite from Claude Code."
+  },
   "plugins": [
     {
       "name": "uefn-ai-toolkit",

@@ -10,18 +10,18 @@ migration, not a permanent state of the repository.
 
 ## The one-line status
 
-The consolidation is **written, committed and pushed in both repositories,
-and verified only as far as it can be without a running UEFN editor and an
-installed plugin.** Nothing is installed. No new tool has ever executed
-against a live editor.
+The consolidation is **written, committed, pushed, and installed as a plugin**.
+What remains unverified is exactly one thing: **no new tool has ever executed
+against a live editor.** Everything that does not need UEFN open has now been
+checked and passes — see 0a.
 
-Since this was written: both repos were pushed on 2026-08-19, and this
-repository was renamed **`uefn-mcp` -> `uefn-ai-toolkit`** (repo, plugin and
-marketplace entry). The MCP server inside it is deliberately still `uefn-mcp`
-— see CLAUDE.md. The commit table below still says `uefn-mcp`; same repo.
+Since this was written: both repos were pushed on 2026-08-19, this repository
+was renamed **`uefn-mcp` -> `uefn-ai-toolkit`** (repo, folder, plugin and
+marketplace entry), and the plugin was installed at user scope from the GitHub
+remote. The MCP server inside it is deliberately still `uefn-mcp` — see
+CLAUDE.md. The commit table below still says `uefn-mcp`; same repo.
 
-The two repositories live at `Root/repos/uefn-mcp` (the local folder still
-carries the old name; the remote is `dylannalex/uefn-ai-toolkit`) and
+The two repositories live at `Root/repos/uefn-ai-toolkit` and
 `Root/repos/personal/fortnite-maps` — not side by side.
 
 ## What changed, and why
@@ -61,33 +61,37 @@ Commits, newest last:
 
 ## 0. Do this first
 
-### 0a. Push, install, and find out what breaks
+### 0a. Push, install, and find out what breaks — done 2026-08-19
 
-Nothing here has been exercised by Claude Code itself. The manifests are
-schema-valid JSON and that is **all** that has been checked.
+The plugin is **installed at user scope from the GitHub remote** and everything
+that can be checked outside a fresh session has been checked and passes.
 
-1. ~~`git push` both repositories.~~ Done 2026-08-19 (`de9f141..6df0923`,
-   `63dd01d..a2219fc`).
-2. `/plugin marketplace add dylannalex/uefn-ai-toolkit`
-3. `/plugin install uefn-ai-toolkit@dylannalex-uefn`
-4. Start a **new session** (MCP servers only connect at session start) and
-   confirm, in order:
-   - the `uefn` tools are listed — i.e. `.mcp.json`'s
-     `uv --directory ${CLAUDE_PLUGIN_ROOT} run uefn-mcp` actually resolves and
-     `uv run` bootstraps its dependencies inside the plugin cache;
-   - `/uefn-ai-toolkit:uefn-knowledge` loads, **and the relative paths in its body
-     resolve** — it routes with `../../docs/...` from the skill's own
-     directory, which is the mechanism the whole knowledge base depends on and
-     has never been tried;
-   - `/uefn-ai-toolkit:new-map-project` is offered.
-5. Open a session in `fortnite-maps`, edit any markdown file, and check the
-   `PostToolUse` hook fired: `scripts/workspace_hook.py` should re-mirror the
-   Verse source and regenerate the indexes. It has only ever been run by hand
-   with `CLAUDE_PROJECT_DIR` set manually.
+1. ~~`git push` both repositories.~~ Done (`de9f141..6df0923`, `63dd01d..a2219fc`).
+2. ~~`/plugin marketplace add dylannalex/uefn-ai-toolkit`~~ Done via
+   `claude plugin marketplace add` — cloned over SSH, marketplace validated.
+   `"source": "./"` (a repo acting as its own marketplace) **works against a
+   real install**; that suspicion is closed.
+3. ~~`/plugin install uefn-ai-toolkit@dylannalex-uefn`~~ Done. Installed to
+   `~/.claude/plugins/cache/dylannalex-uefn/uefn-ai-toolkit/0.2.0`.
+4. Verified directly against the installed cache, without waiting for a session:
+   - `uv --directory <cache> run uefn-mcp` **resolves and bootstraps** — uv built
+     the package and installed 39 deps into a `.venv` inside the plugin cache;
+     `uefn-mcp.exe` exists, starts on stdio and exits 0 on EOF;
+     `import uefn_mcp.server` succeeds; `tests/test_bridge.py` passes 4/4 there.
+   - all 15 `../../docs/...` routes in `uefn-knowledge/SKILL.md` **resolve from
+     the installed skill directory**. The mechanism the whole knowledge base
+     depends on is sound.
+   - `claude plugin validate .` passes clean (the missing
+     `metadata.description` it warned about was added).
+5. ~~Workspace hook.~~ Run from the **installed** plugin path: the guard no-ops
+   in an unrelated repo, and against `fortnite-maps` it mirrored 4 Verse files
+   out of the UEFN project and regenerated the indexes with 0 changes —
+   idempotent, `git status` clean afterwards.
 
-If the plugin does not load, suspect `.claude-plugin/marketplace.json`'s
-`"source": "./"` first — a repository acting as both marketplace and plugin is
-documented but was not verified against a real install.
+**Left for a fresh session — the only two things a restart can show:** that the
+`uefn` MCP tools appear in the tool list, and that
+`/uefn-ai-toolkit:uefn-knowledge` and `/uefn-ai-toolkit:new-map-project` are
+offered. Both are now low-risk: the server runs and the skill's paths resolve.
 
 ### 0b. Exercise every new tool against a live editor — none has ever run
 
